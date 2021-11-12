@@ -21,6 +21,12 @@ class Environment:
         self.edge_add_old = 0
         self.last_reward = 0
         self.observation = torch.zeros(1,self.nodes,1,dtype=torch.float)
+        self.static = self.graph_init.static # location coordinates
+        self.dynamic = self.graph_init.dynamic.int() # load, demand
+        self.demand_init_tot = torch.abs(self.dynamic[1]).sum()
+        self.max_load = self.graphs[self.games].max_load
+        self.node_idx = 0
+
 
     def observe(self):
         """Returns the current observation that the agent can make
@@ -28,17 +34,54 @@ class Environment:
         """
         return self.observation
 
-    def act(self,node):
+    def act(self, chosen_idx):
 
-        self.observation[:,node,:]=1
-        reward = self.get_reward(self.observation, node)
+        # # Update the dynamic elements differently for if we visit depot vs. a city
+        # chosen_idx = torch.tensor(chosen_idx)
+        # visit = chosen_idx.ne(0)
+        # depot = chosen_idx.eq(0)
+
+        # Clone the dynamic variable so we don't mess up graph
+        all_loads = self.dynamic[0]
+        all_demands = self.dynamic[1]
+        load = all_loads[chosen_idx]
+        demand = all_demands[chosen_idx]
+
+        # Loading and supplying constraint
+        # if we've chosen to visit a city, try to satisfy as much demand as possible
+        if chosen_idx != 0:
+            new_load = torch.clamp(load - demand, max= self.max_load, min=0)
+            if demand >= 0:
+                new_demand = torch.clamp(demand - load, min=0)
+            else:
+                new_demand = torch.clamp(demand + (self.max_load - load), max = 0)
+
+            all_loads = new_load
+            all_demands[chosen_idx] = new_demand
+
+
+        # Return to depot to half fill vehicle load
+        else:
+            all_loads= int(self.max_load/2) # TODO: vehicle is reload scheme
+            all_demands[chosen_idx] = 0 # Demand at depot is 0
+
+        # print("all_demands:" ,all_demands)
+        # print("all_loads:" ,all_loads)
+
+        self.observation[:, chosen_idx, :] = 1
+        self.dynamic[0] = all_loads
+        self.dynamic[1] = all_demands
+
+        reward = self.get_reward(chosen_idx)
+        self.node_idx = chosen_idx
+
         return reward
 
-    def get_reward(self, observation, node):
+    def get_reward(self, node):
 
         if self.name == "MVC":
 
-            new_nbr_nodes=np.sum(observation[0].numpy())
+            new_nbr_nodes=np.sum(self.observation[0].numpy())
 
             if new_nbr_nodes - self.nbr_of_nodes > 0:
                 reward = -1#np.round(-1.0/20.0,3)
@@ -54,7 +97,7 @@ class Environment:
             edge_add = 0
 
             for edge in self.graph_init.edges():
-                if observation[:,edge[0],:]==0 and observation[:,edge[1],:]==0:
+                if self.observation[:,edge[0],:]==0 and self.observation[:,edge[1],:]==0:
                     done=False
                     # break
                 else:
@@ -85,7 +128,25 @@ class Environment:
 
             return (change_reward,done)
 
+        elif self.name == "bss":
+            done=False
+            loc_prev = self.static[self.node_idx]
+            loc = self.static[node]
+            dist = (loc_prev-loc).norm()
 
+            demand = np.abs(self.dynamic[1]).sum()
+            reward = -dist # TODO add soft coeff
+
+            if demand == 0 or self.observation.sum() == self.observation.shape[1]:
+            # if demand == 0:
+                demand_penality = demand#/self.demand_init_tot # #TODO better normalization
+                reward += demand_penality #TODO better unsat final demand penality
+                done =True
+                print("Games Finished: ", self.games )
+            # print("visit node:{}, reward:{}, done:{}:".format(node, reward, done))
+            # print("$"*50)
+
+            return (reward, done)
 
 
     def get_approx(self):
