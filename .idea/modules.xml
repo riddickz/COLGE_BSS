@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/COLGE.iml" filepath="$PROJECT_DIR$/.idea/COLGE.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../pytorch-drl4vrp/.idea/pytorch-drl4vrp.iml" filepath="$PROJECT_DIR$/../pytorch-drl4vrp/.idea/pytorch-drl4vrp.iml" />
     </modules>
   </component>
 </project>
