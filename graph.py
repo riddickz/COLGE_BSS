@@ -42,8 +42,6 @@ class Graph:
         self.rng = np.random.RandomState()
         self.seed_used = None
 
-        self.bss_graph_gen()
-
     def seed(self, _seed):
         self.seed_used = _seed
         self.rng.seed(_seed)
@@ -77,6 +75,7 @@ class Graph:
 
         # add KNN edges with random K
         W_val = squareform(pdist(coords, metric='euclidean'))
+        W_val = self.get_time_based_distance_matrix(W_val)
 
         W = np.zeros((num_nodes, num_nodes))
         knns = np.argpartition(W_val, kth=num_neighbors, axis=-1)[:, num_neighbors::-1]
@@ -94,6 +93,9 @@ class Graph:
 
         W_val *= W
         return W.astype(int), W_val
+
+    def get_time_based_distance_matrix(self, W):
+        return (W / self.speed) * 60
 
     def bss_graph_gen(self):
         self.gen_instance()
