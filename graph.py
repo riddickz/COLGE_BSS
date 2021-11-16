@@ -6,44 +6,36 @@ from scipy.spatial.distance import pdist, squareform
 import matplotlib.pyplot as plt
 import os
 import torch
+from scipy import sparse
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 # seed = np.random.seed(120)
 
 class Graph:
-    def __init__(self, graph_type, cur_n, p=None, m=None, max_load=20, max_demand=9, seed=None):
+    def __init__(self, cur_n, max_load=20, max_demand=9, area = 10, seed=None):
+        if max_load < max_demand:
+            raise ValueError(':param max_load: must be > max_demand')
 
-        if graph_type == 'erdos_renyi':
-            self.g = nx.erdos_renyi_graph(n=cur_n, p=p, seed=seed)
-        elif graph_type == 'powerlaw':
-            self.g = nx.powerlaw_cluster_graph(n=cur_n, m=m, p=p, seed=seed)
-        elif graph_type == 'barabasi_albert':
-            self.g = nx.barabasi_albert_graph(n=cur_n, m=m, seed=seed)
-        elif graph_type =='gnp_random_graph':
-            self.g = nx.gnp_random_graph(n=cur_n, p=p, seed=seed)
-
-        elif graph_type =='bss':
-            if max_load < max_demand:
-                raise ValueError(':param max_load: must be > max_demand')
-
-            self.seed = seed
-            self.max_nodes = cur_n
-            self.max_load = max_load
-            self.max_demand = max_demand
-            self.static = None
-            self.dynamic = None
-            self.W, self.W_weighted = self.bss_graph_gen()
-            self.g = nx.from_numpy_array(self.W_weighted)
-            self.g.edges(data=True)
+        self.seed = seed
+        self.max_nodes = cur_n
+        self.max_load = max_load
+        self.max_demand = max_demand
+        self.area = area #km
+        self.static = None
+        self.dynamic = None
+        self.W, self.W_weighted = self.bss_graph_gen()
+        self.A = sparse.csr_matrix(self.W_weighted)
+        self.g = nx.from_numpy_matrix(np.matrix(self.W_weighted), create_using=nx.Graph)
+        self.g.edges(data=True)
 
     def gen_instance(self):  # Generate random instance
         seed = np.random.randint(123456789)
         np.random.seed(seed)
 
-        coords = np.random.rand(self.max_nodes, 2)  # node num with (dimension) coordinates in [0,1]
-        pca = PCA(n_components=2)  # center & rotate coordinates
-        locations = pca.fit_transform(coords)
+        locations = np.random.rand(self.max_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
+        # pca = PCA(n_components=2)  # center & rotate coordinates
+        # locations = pca.fit_transform(coords)
 
         demands = np.random.randint(1, self.max_demand, self.max_nodes) * np.random.choice([-1, 1],
                                                                                            self.max_nodes)  # exclude 0
@@ -116,3 +108,8 @@ class Graph:
 # nx.draw(g.g, with_labels=True)
 # plt.show()
 # pass
+
+# layout = nx.spring_layout(G)
+# nx.draw(G, layout)
+# nx.draw_networkx_edge_labels(G, pos=layout)
+# plt.show()

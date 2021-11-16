@@ -4,10 +4,13 @@ import time
 import os
 import logging
 import models
+import tgcn
 from utils.config import load_model_config
+from scipy import sparse
 
 import torch.nn.functional as F
 import torch
+from torch_geometric.utils import from_scipy_sparse_matrix
 
 # Set up logger
 logging.basicConfig(
@@ -35,9 +38,9 @@ class DQAgent:
         self.lambd = 0.
         self.n_step = n_step
 
-        self.epsilon_ = 0.5 #1
-        self.epsilon_min = 0.02 #0.02
-        self.discount_factor = 0.999990
+        self.epsilon_ = 0.8
+        self.epsilon_min = 0.02
+        self.discount_factor = 0.999
         # self.eps_end=0.02
         # self.eps_start=1
         # self.eps_step=20000
@@ -45,7 +48,7 @@ class DQAgent:
         self.memory = []
         self.memory_n = []
         self.minibatch_length = bs
-        self.neg_inf = torch.tensor(-1e7)
+        self.neg_inf = torch.tensor(-1000)
         self.num_vehicle = 2
 
         if self.model_name == 'S2V_QN_1':
@@ -62,6 +65,12 @@ class DQAgent:
 
             args_init = load_model_config()[self.model_name]
             self.model = models.GCN_QN_1(**args_init)
+
+        elif self.model_name == "TGCN":
+            self.model = tgcn.TGCN(adj=self.adj_weighted, hidden_dim=64)
+
+        elif self.model_name == "RecurrentGCN":
+            self.model = models.RecurrentGCN(node_features=3)
 
         elif self.model_name == 'LINE_QN':
 
@@ -92,14 +101,10 @@ class DQAgent:
         if (len(self.memory_n) != 0) and (len(self.memory_n) % 300000 == 0):
             self.memory_n = random.sample(self.memory_n, 120000)
 
-        self.nodes = self.graphs[self.games].nodes()
-        # self.adj = self.graphs[self.games].adj()
-        # self.adj = self.adj.todense()
-        # self.adj = torch.from_numpy(np.expand_dims(self.adj.astype(int), axis=0))
-        # self.adj = self.adj.type(torch.FloatTensor)
-        self.adj = torch.tensor(self.graphs[self.games].W).unsqueeze(dim=0).type(torch.FloatTensor)
-        self.adj_weighted = torch.tensor(self.graphs[self.games].W_weighted).unsqueeze(dim=0).type(torch.FloatTensor)
-
+        self.graph = self.graphs[self.games]
+        self.nodes = self.graph.nodes()
+        self.adj = torch.tensor(self.graph.W).unsqueeze(dim=0).float()
+        self.adj_weighted = torch.tensor(self.graph.W_weighted).unsqueeze(dim=0).float()
         self.last_action = 0
         self.last_observation = torch.zeros(1, self.nodes, 3, dtype=torch.float)
         self.last_reward = -0.01
@@ -108,8 +113,8 @@ class DQAgent:
         self.cur_node = 0
         self.trip_len = 0 # for time limit constr
 
-    def act(self, observation, dynamic):
-        nbr_nodes = torch.tensor(self.graphs[self.games].W[self.cur_node])
+    def act(self, observation, dynamic, tour_length):
+        nbr_nodes = torch.tensor(self.graph.W[self.cur_node])
         # Clone the dynamic variable so we don't mess up graph
         all_loads = dynamic[0].clone()
         all_demands = dynamic[1].clone()
@@ -127,28 +132,37 @@ class DQAgent:
         # avoid repeating nodes
         nbr_nodes[self.last_action] = 0
 
+        # nodes with demand fully covered
+        nodes_uncovered = (observation[0, :, 0] == 0)
+
+        node_visited = torch.zeros_like(nbr_nodes)
+        node_visited[0] = 0 # depot is always available unless last visit
+        node_visited[self.last_action] = 1
+
+        mask = nbr_nodes * nodes_uncovered * (1 - node_visited)
+
         chosen_idx = 0
 
-        # Time limit constraint #TODO
+        # Time limit constraint
         # All vehicles must start at the depot and return to the depot within a limited time.
-        if self.trip_len >= len(observation[0]) / self.num_vehicle:  # TODO  return to depot after visit nodes/cars
-            self.trip_len = 0
-            return chosen_idx
+        if (tour_length % 60 == 0) and (self.last_action != 0):  # TODO  return to depot after traveling 120 min at 30km/h
+            return chosen_idx # return to depot
 
-        if self.epsilon_ > torch.rand(1):
-            chosen_idx = np.random.choice(np.where(nbr_nodes == 1)[0])
+        elif self.epsilon_ > torch.rand(1):
+            if (nbr_nodes* mask == 1).any():
+                chosen_idx = np.random.choice(np.where(nbr_nodes* mask == 1)[0])
 
         else:
-            q_a = self.model(observation, self.adj_weighted).detach().clone()  # TODO self.static, self.dynamic
-
-            # nodes with demand not fully covered
-            nodes_uncovered = (observation[0, :, 0] == 0)
-            mask = 1 - nbr_nodes * nodes_uncovered
-
+            q_a = self.model(observation, self.adj_weighted).detach().clone()
+            # q_a = self.model(observation, self.graphs[self.games].A).detach().clone()
+            # edge_index, edge_weight = from_scipy_sparse_matrix(self.graphs[self.games].A)
+            # q_a = self.model(observation.squeeze(0), edge_index, edge_weight.float()).detach().clone()
+            # q_a = q_a.unsqueeze(0)
+            chosen_idx = torch.argmax(q_a[0, :, 0] + (1- mask) * self.neg_inf ).item()
             try:
-                chosen_idx = torch.argmax(q_a[0, :, 0] + mask * self.neg_inf).item()
+                assert chosen_idx != self.last_action
             except:
-                print(q_a)
+                print(chosen_idx, self.last_action)
 
         self.cur_node = chosen_idx
         self.trip_len += 1

@@ -5,16 +5,18 @@ This is the machinnery that runs your agent in an environment.
 import matplotlib.pyplot as plt
 import numpy as np
 import agent
+from utils.vis import plot_reward
 
 class Runner:
-    def __init__(self, environment, agent, verbose=False):
+    def __init__(self, environment, agent, verbose=False, render = True):
         self.environment = environment
         self.agent = agent
         self.verbose = verbose
+        self.render_on = render
 
     def step(self):
         observation = self.environment.observe().clone()
-        action = self.agent.act(observation, self.environment.dynamic)
+        action = self.agent.act(observation, self.environment.dynamic, self.environment.tour_length)
         (reward, done) = self.environment.step(action)
         self.agent.reward(observation, action, reward,done)
         return (observation, action, reward, done)
@@ -30,7 +32,7 @@ class Runner:
             print(" -> epoch : "+str(epoch_))
             for g in range(1, games + 1):
                 print(" -> games : "+str(g))
-                for epoch in range(5):
+                for epoch in range(20): #TODO: repeat one graph 20x
                     self.environment.reset(g)
                     self.agent.reset(g)
                     cumul_reward = 0.0
@@ -69,6 +71,9 @@ class Runner:
 
                         if done:
                             break
+                    if self.render_on:
+                        self.environment.render()
+                        # plot_reward(list_cumul_reward)
 
                 # np.savetxt('test_'+str(epoch_)+'.out', list_optimal_ratio, delimiter=',')
                 # np.savetxt('test_approx_' + str(epoch_) + '.out', list_aprox_ratio, delimiter=',')
@@ -110,6 +115,8 @@ class BatchRunner:
             env.reset()
             agent.reset()
             game_reward = 0
+            if self.render_on:
+                env.render()
             for i in range(1, max_iter+1):
                 observation = env.observe()
                 action = agent.act(observation)

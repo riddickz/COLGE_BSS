@@ -4,7 +4,47 @@ import random
 #from gensim.models import Word2Vec
 import networkx as nx
 import numpy as np
+import torch
+from torch_geometric_temporal.nn.recurrent import GConvGRU
+from torch_geometric.utils import from_scipy_sparse_matrix
+import torch
+import torch.nn as nn
+from torch.autograd import Variable
+from torch.nn.parameter import Parameter
+import math
+from torch_geometric.nn import GCNConv
 
+class RecurrentGCN(torch.nn.Module):
+
+    def __init__(self, features=3, hidden= 64, classes=1):
+        super(RecurrentGCN, self).__init__()
+        self.recurrent_1 = GConvGRU(features, hidden, 5)
+        self.recurrent_2 = GConvGRU(hidden, 32, 5)
+        self.linear = torch.nn.Linear(32, classes)
+
+    def forward(self, xv, adj):
+        edge_index, edge_weight = from_scipy_sparse_matrix(adj)
+        edge_weight = edge_weight.float()
+        xv = xv.squeeze(0)
+        x = self.recurrent_1(xv, edge_index, edge_weight)
+        x = F.relu(x)
+        # x = F.dropout(x, training=self.training)
+        x = self.recurrent_2(x, edge_index, edge_weight)
+        x = F.relu(x)
+        # x = F.dropout(x, training=self.training)
+        x = self.linear(x)
+        return x
+# class RecurrentGCN(torch.nn.Module):
+#     def __init__(self, node_features, filters):
+#         super(RecurrentGCN, self).__init__()
+#         self.recurrent = GConvGRU(node_features, filters, 2)
+#         self.linear = torch.nn.Linear(filters, 1)
+#
+#     def forward(self, x, edge_index, edge_weight):
+#         h = self.recurrent(x, edge_index, edge_weight)
+#         h = F.relu(h)
+#         h = self.linear(h)
+#         return h
 
 # class S2V_QN_1(torch.nn.Module):
 #     def __init__(self,reg_hidden, embed_dim, len_pre_pooling, len_post_pooling, T):

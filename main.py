@@ -23,31 +23,26 @@ logging.basicConfig(
 parser = argparse.ArgumentParser(description='RL running machine')
 parser.add_argument('--environment_name', metavar='ENV_CLASS', type=str, default='bss', help='Class to use for the environment. Must be in the \'environment\' module')
 parser.add_argument('--agent', metavar='AGENT_CLASS', default='Agent', type=str, help='Class to use for the agent. Must be in the \'agent\' module.')
-parser.add_argument('--graph_type',metavar='GRAPH', default='bss',help ='Type of graph to optimize')
 parser.add_argument('--graph_nbr', type=int, default='1000', help='number of differente graph to generate for the training sample')
-parser.add_argument('--model', type=str, default='GCN_QN_1', help='model name')
+parser.add_argument('--model', type=str, default='GCN_QN_1', help='model name') #GCN_QN_1 RecurrentGCN
 parser.add_argument('--ngames', type=int, metavar='n', default='500', help='number of games to simulate')
 parser.add_argument('--niter', type=int, metavar='n', default='1000', help='max number of iterations per game')
 parser.add_argument('--epoch', type=int, metavar='nepoch',default=25, help="number of epochs")
 parser.add_argument('--lr',type=float, default=1e-4,help="learning rate")
 parser.add_argument('--bs',type=int,default=32,help="minibatch size for training")
 parser.add_argument('--n_step',type=int, default=3,help="n step in RL")
-parser.add_argument('--node', type=int, metavar='nnode',default=20, help="number of node in generated graphs")
-parser.add_argument('--p',default=0.14,help="p, parameter in graph degree distribution")
-parser.add_argument('--m',default=4,help="m, parameter in graph degree distribution")
+parser.add_argument('--node', type=int, metavar='nnode',default=30, help="number of node in generated graphs")
 parser.add_argument('--batch', type=int, metavar='nagent', default=None, help='batch run several agent at the same time')
 parser.add_argument('--verbose', action='store_true', default=True, help='Display cumulative results at each step')
 
 def main():
     args = parser.parse_args()
-    logging.info('Loading graph %s' % args.graph_type)
+    logging.info('Loading graph: nodes{}, ngames {}, graph_nbr {} '.format(args.node, args.ngames, args.graph_nbr))
     graph_dic = {}
-    #seed = 125
-    #graph_one = graph.Graph(graph_type=args.graph_type, cur_n=20, p=0.15,m=4, seed=seed)
 
     for graph_ in range(args.graph_nbr):
         seed = np.random.seed(120+graph_)
-        graph_dic[graph_]=graph.Graph(graph_type=args.graph_type, cur_n=args.node, p=args.p,m=args.m,seed=seed)
+        graph_dic[graph_]=graph.Graph(cur_n = args.node, max_load=5, max_demand=5, area = 10, seed=seed) # base on paper
 
     logging.info('Loading agent...')
     agent_class = agent.Agent(graph_dic, args.model, args.lr,args.bs,args.n_step)
