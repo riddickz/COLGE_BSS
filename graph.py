@@ -14,7 +14,7 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 class Graph:
     def __init__(self, 
-        cur_n, 
+        num_nodes, 
         k_nn, 
         num_vehicles,
         penalty_cost_demand,
@@ -23,14 +23,12 @@ class Graph:
         time_limit,
         max_load=20, 
         max_demand=9, 
-        area = 10, 
-        seed=None):
+        area = 10):
 
         if max_load < max_demand:
             raise ValueError(':param max_load: must be > max_demand')
 
-        self.seed = seed
-        self.num_nodes = cur_n
+        self.num_nodes = num_nodes
         self.num_neighbors = k_nn
         self.max_load = max_load
         self.max_demand = max_demand
@@ -40,26 +38,32 @@ class Graph:
         self.penalty_cost_time = penalty_cost_time
         self.speed = speed
         self.time_limit = time_limit
+
+        self.rng = np.random.RandomState()
+        self.seed_used = None
+
         self.bss_graph_gen()
 
-    def gen_instance(self):  # Generate random instance
-        seed = np.random.randint(123456789)
-        np.random.seed(seed)
+    def seed(self, _seed):
+        self.seed_used = _seed
+        self.rng.seed(_seed)
 
-        locations = np.random.rand(self.num_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
+
+    def gen_instance(self):  # Generate random instance
+
+        locations = self.rng.rand(self.num_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
         # pca = PCA(n_components=2)  # center & rotate coordinates
         # locations = pca.fit_transform(coords)
 
-        demands = np.random.randint(1, self.max_demand, self.num_nodes) * np.random.choice([-1, 1],
-                                                                                           self.num_nodes)  # exclude 0
-        demands[0] = -sum(demands[1:])  # depot
-        demands = torch.tensor(demands)
+        self.demands = self.get_demands()
+        
+        demands_tensor = torch.tensor(self.demands)
 
         loads = torch.zeros(self.num_nodes)
 
         self.static = torch.tensor(locations)
         self.observation = torch.zeros(self.num_nodes)
-        self.dynamic = torch.stack((self.observation, loads, demands), dim=1)
+        self.dynamic = torch.stack((self.observation, loads, demands_tensor), dim=1)
 
 
     def adjacenct_gen(self, num_nodes, num_neighbors, coords):
@@ -119,14 +123,59 @@ class Graph:
 
         return nx.adjacency_matrix(self.g)
 
-# Toy Case Test
-g = Graph(cur_n=10, k_nn=4, penalty_cost=1, time_limit=120)
-# G = nx.from_numpy_array(g.W_weighted)
-nx.draw(g.g, with_labels=True)
-plt.show()
-pass
+    def get_demands(self):
+        """ Gets random demand vector that has zero sum. """
 
-# layout = nx.spring_layout(G)
-# nx.draw(G, layout)
-# nx.draw_networkx_edge_labels(G, pos=layout)
-# plt.show()
+        # randomly sample demands
+        demands = self.rng.randint(1, self.max_demand, self.num_nodes) 
+        demands *= self.rng.choice([-1, 1], self.num_nodes)  # exclude 0
+
+        # zero demand at depot
+        demands[0] = 0 
+    
+        # adjust demands until they sum to zero.
+        while True:
+            
+            if demands.sum() == 0:
+                return demands
+            
+            demand_sum_pos = demands.sum() > 0
+    
+            idx = self.rng.randint(1, demands.shape[0])
+            
+            if demands[idx] < 0:
+                if demand_sum_pos:
+                    demands[idx] -= 1
+                else:
+                    if demands[idx] == -1: # case for over -1 to 1
+                        demands[idx] += 1
+                    demands[idx] += 1
+                    
+            elif demands[idx] > 0:
+                if demand_sum_pos:
+                    if demands[idx] == 1: # case for over 1 to -1
+                        demands[idx] -= 1
+                    demands[idx] -= 1
+                else:
+                    
+                    demands[idx] += 1
+                
+        return demands
+
+
+# Toy Case Test
+def test():
+    g = Graph(
+        num_nodes=10, 
+        k_nn=4, 
+        num_vehicles=3,
+        penalty_cost_demand=1,
+        penalty_cost_time=1, 
+        speed=30,
+        time_limit=120)
+    nx.draw(g.g, with_labels=True)
+    plt.show()
+    
+
+if __name__ == "__main__":
+    test()
