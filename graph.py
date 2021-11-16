@@ -13,7 +13,19 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 # seed = np.random.seed(120)
 
 class Graph:
-    def __init__(self, cur_n, k_nn, penalty_cost, time_limit, max_load=20, max_demand=9, area = 10, seed=None):
+    def __init__(self, 
+        cur_n, 
+        k_nn, 
+        num_vehicles,
+        penalty_cost_demand,
+        penalty_cost_time, 
+        speed,
+        time_limit,
+        max_load=20, 
+        max_demand=9, 
+        area = 10, 
+        seed=None):
+
         if max_load < max_demand:
             raise ValueError(':param max_load: must be > max_demand')
 
@@ -23,7 +35,10 @@ class Graph:
         self.max_load = max_load
         self.max_demand = max_demand
         self.area = area #km
-        self.penalty_cost = penalty_cost
+        self.num_vehicles = num_vehicles
+        self.penalty_cost_demand = penalty_cost_demand
+        self.penalty_cost_time = penalty_cost_time
+        self.speed = speed
         self.time_limit = time_limit
         self.bss_graph_gen()
 
