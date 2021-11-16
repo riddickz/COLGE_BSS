@@ -13,48 +13,48 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 # seed = np.random.seed(120)
 
 class Graph:
-    def __init__(self, cur_n, max_load=20, max_demand=9, area = 10, seed=None):
+    def __init__(self, cur_n, k_nn, penalty_cost, time_limit, max_load=20, max_demand=9, area = 10, seed=None):
         if max_load < max_demand:
             raise ValueError(':param max_load: must be > max_demand')
 
         self.seed = seed
-        self.max_nodes = cur_n
+        self.num_nodes = cur_n
+        self.num_neighbors = k_nn
         self.max_load = max_load
         self.max_demand = max_demand
         self.area = area #km
-        self.static = None
-        self.dynamic = None
-        self.W, self.W_weighted = self.bss_graph_gen()
-        self.A = sparse.csr_matrix(self.W_weighted)
-        self.g = nx.from_numpy_matrix(np.matrix(self.W_weighted), create_using=nx.Graph)
-        self.g.edges(data=True)
+        self.penalty_cost = penalty_cost
+        self.time_limit = time_limit
+        self.bss_graph_gen()
 
     def gen_instance(self):  # Generate random instance
         seed = np.random.randint(123456789)
         np.random.seed(seed)
 
-        locations = np.random.rand(self.max_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
+        locations = np.random.rand(self.num_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
         # pca = PCA(n_components=2)  # center & rotate coordinates
         # locations = pca.fit_transform(coords)
 
-        demands = np.random.randint(1, self.max_demand, self.max_nodes) * np.random.choice([-1, 1],
-                                                                                           self.max_nodes)  # exclude 0
+        demands = np.random.randint(1, self.max_demand, self.num_nodes) * np.random.choice([-1, 1],
+                                                                                           self.num_nodes)  # exclude 0
         demands[0] = -sum(demands[1:])  # depot
         demands = torch.tensor(demands)
 
-        loads = torch.zeros(self.max_nodes)
+        loads = torch.zeros(self.num_nodes)
 
         self.static = torch.tensor(locations)
-        self.dynamic = torch.stack((loads, demands), dim=0)
+        self.observation = torch.zeros(self.num_nodes)
+        self.dynamic = torch.stack((self.observation, loads, demands), dim=1)
 
-    def adjacenct_gen(self, num_nodes, coords):
 
-        if num_nodes <= 20:
-            num_neighbors = 7
-            # num_neighbors = num_nodes - 1 # fully connected
-        else:
-            num_neighbors = 15
-            # num_neighbors = int(np.random.uniform(low=0.9, high=1) * 8)
+    def adjacenct_gen(self, num_nodes, num_neighbors, coords):
+        assert num_neighbors < num_nodes
+        # if num_nodes <= 20:
+        #     num_neighbors = 7
+        #     # num_neighbors = num_nodes - 1 # fully connected
+        # else:
+        #     num_neighbors = 15
+        #     # num_neighbors = int(np.random.uniform(low=0.9, high=1) * 8)
 
         # add KNN edges with random K
         W_val = squareform(pdist(coords, metric='euclidean'))
@@ -78,9 +78,11 @@ class Graph:
 
     def bss_graph_gen(self):
         self.gen_instance()
-
-        W, W_val = self.adjacenct_gen(self.max_nodes, self.static)
-        return W, np.multiply(W_val, W)
+        self.W, self.W_val = self.adjacenct_gen(self.num_nodes, self.num_neighbors, self.static)
+        self.W_weighted = torch.tensor(np.multiply(self.W_val, self.W))
+        self.A = sparse.csr_matrix(self.W_weighted)
+        self.g = nx.from_numpy_matrix(np.matrix(self.W_weighted), create_using=nx.Graph)
+        self.g.edges(data=True)
 
     def nodes(self):
 
@@ -102,12 +104,12 @@ class Graph:
 
         return nx.adjacency_matrix(self.g)
 
-# # Toy Case Test
-# g = Graph(graph_type="bss")
-# # G = nx.from_numpy_array(g.W_weighted)
-# nx.draw(g.g, with_labels=True)
-# plt.show()
-# pass
+# Toy Case Test
+g = Graph(cur_n=10, k_nn=4, penalty_cost=1, time_limit=120)
+# G = nx.from_numpy_array(g.W_weighted)
+nx.draw(g.g, with_labels=True)
+plt.show()
+pass
 
 # layout = nx.spring_layout(G)
 # nx.draw(G, layout)
