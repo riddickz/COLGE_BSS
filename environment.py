@@ -162,7 +162,7 @@ class Environment:
 
         plt.xlabel('X')
         plt.ylabel('Y')
-        plt.title("Game {}".format(self.games))
+        plt.title("Game {} Time Cost: {}".format(self.games,round(self.t_total.item())))
         plt.pause(0.001)
         plt.close()
 
