@@ -6,8 +6,30 @@ from graph import Graph
 
 class BSSRPMIP(object):
 
-	def __init__(self, g, use_penalties, solver_time_limit=1e5, tol=1e-5):
 
+	def __init__(self, 
+		g:"Graph", 
+		use_penalties:bool, 
+		solver_time_limit:float=1e5, 
+		tol:float=1e-5):
+
+		""" 
+		Class for BSSRP MIP object.  Represents the BSSRP graph object as a MIP and 
+		provides functionality for solving the MIP and  recoving routes.  
+
+		Parameters
+		----------
+		g:
+			The graph instance.  Must be initalized with g.gen_bssrp_graph().  
+		use_penalties:
+			A boolean indicating if the relaxed formulation should be used.  The relaxed 
+			formulation simply replaces the hard demand and time constraints with 
+			a penalty in the objective for violation.
+		solver_time_limit:
+			Time limit for the solver. 
+		tol:
+			numerical tolerence.  
+		"""
 		self.graph = g
 		self.use_penalties = use_penalties
 		self.solver_time_limit = solver_time_limit
@@ -33,14 +55,29 @@ class BSSRPMIP(object):
 		# TODO:
 		self.tau = 0
 
+		# initialize all class members
+		self.model = None
+
+		self.x_vars = None
+		self.x_vars = None
+		self.f_vars = None
+		self.t_vars = None
+		self.d_vars = None
+		self.var_dict = None
+
+		self.routes = None
+
 		self.build_model()
 
-	def optimize(self):
-		self.model.optimize()
 
+	def optimize(self):
+		""" Optimizes the model. """
+		self.model.optimize()
+		self.construct_routes()
 
 
 	def build_model(self):
+		""" Builds the gurobi model. """
 
 		# initialize model
 		self.model = gp.Model()
@@ -55,6 +92,7 @@ class BSSRPMIP(object):
 
 
 	def add_variables(self):
+		""" Adds variables to gurobi model. """
 
 		# initialize variables
 		self.x_vars = {} # tour (edge) vars
@@ -62,8 +100,6 @@ class BSSRPMIP(object):
 		self.z_vars = {} # demand vars
 		self.f_vars = {} # vehicle vars
 
-		self.t_vars = None # time limit vars
-		self.d_vars = None # unmet demand vars
 		if self.use_penalties:
 			self.t_vars = {}
 			self.d_vars = {}
@@ -120,11 +156,10 @@ class BSSRPMIP(object):
 			"f" : self.f_vars
 		}
 
-		return 
-
+		return
 
 	def add_depot_constraints(self):
-
+		""" Adds depot related constraints to gurobi model. """
 
 		# constraint (2)
 		for k in self.K:
@@ -140,8 +175,11 @@ class BSSRPMIP(object):
 				eq_ += self.x_vars[f"x_{i}_{0}_{k}"]
 			self.model.addConstr(eq_ <= self.num_vehicles, name=f"3_depot_in_{k}")
 
+		return
+
 
 	def add_node_flow_constraints(self):
+		""" Adds flow constraints to gurobi model. """
 
 		# constraint (4)
 		for k in self.K:
@@ -174,9 +212,11 @@ class BSSRPMIP(object):
 				eq_ += self.y_vars[f"y_{i}_{k}"] 
 			self.model.addConstr(eq_ == 1, name=f"6_node_visited_{i}")
 
+		return
 
 
 	def add_demand_constraints(self):
+		""" Adds deamnd constraints to gurobi model. """
 
 		# constraint (8)
 		for k in self.K:
@@ -209,7 +249,11 @@ class BSSRPMIP(object):
 				eq_ -= self.demands[i] * self.y_vars[f"y_{i}_{k}"]
 				self.model.addConstr(eq_ == 0, name=f"9_bike_loading_{i}_{k}")
 
+		return
+
+
 	def add_time_constraints(self):
+		""" Adds time constraints to gurobi model. """
 
 		# constraint (10)
 		for k in self.K:
@@ -226,15 +270,17 @@ class BSSRPMIP(object):
 				
 			self.model.addConstr(eq_ <= self.time_limit, name=f"10_time_{k}")
 
+		return
+
 
 	def add_subtour_elimination_constraints(self):
+		""" Adds subtour elimiation constraints to gurobi model. """
 
 		# constraiant (11)
 		for k in self.K:
 			for j in self.V_0:
 				self.model.addConstr(self.f_vars[f"f_0_{j}_{k}"] == 0, name=f"11_st_elim_zero_0_{j}_{k}")
 
-				
 		# constraiant (12)
 		eq_ = 0
 		for k in self.K:
@@ -252,7 +298,6 @@ class BSSRPMIP(object):
 					x = self.x_vars[f"x_{i}_{j}_{k}"]
 					self.model.addConstr(f - self.n_ports*x <= 0, name=f"13_st_elim_bound_{i}_{j}_{k}")
 						
-				
 		# constraiant (15)
 		for k in self.K:
 			for i in self.V_0:
@@ -270,8 +315,20 @@ class BSSRPMIP(object):
 				eq_ -= self.y_vars[ f"y_{i}_{k}"]
 				self.model.addConstr(eq_ == 0, name=f"15_st_elim_one_diff_{i}_{k}")
 
+		return
+
 
 	def get_next_node(self, edges, node):
+		""" 
+		Finds the next node in a list of edges. 
+
+		Parameters
+		----------
+		edges:
+			An unorder list of edges.
+		node:
+			Node to fine the next edge with respect to. 
+		"""
 	
 		for edge in edges:
 			if node == edge[0]:
@@ -280,8 +337,18 @@ class BSSRPMIP(object):
 		print(node, edges)
 		raise Exception("Start node not found")
 
+
 	def find_cycle(self, edges, start_node):
-		
+		""" 
+		Finds a cycle starting starting at node start_node.
+
+		Parameters
+		----------
+		edges:
+			An unorder list of edges.
+		start_node:
+			Node to start the cycle with respect to.
+		"""
 		cycle = [start_node]
 		cur_node = start_node
 		
@@ -298,11 +365,19 @@ class BSSRPMIP(object):
 			
 		return cycle
 
+
 	def find_all_cycles(self, edges_):
+		""" 
+		Finds all cycles in the solution.  Returns an error if multiple cycles found. 
+
+		Parameters
+		----------
+		edges_:
+			An unorder list of edges.
+		"""
 		
 		if len(edges_) == 0:
-			return []
-		
+			return []		
 		edges = edges_.copy()
 		cycles = []
 		
@@ -313,8 +388,9 @@ class BSSRPMIP(object):
 		
 		return cycle
 
-	def get_routes(self):
-		
+
+	def construct_routes(self):
+		""" Constructs the routes for each vehicle. """
 		routes = {}
 
 		for k in range(self.num_vehicles):
@@ -328,10 +404,18 @@ class BSSRPMIP(object):
 			routes[k] = self.find_all_cycles(edges)
 		
 		self.routes = routes
+		return
 
-		return routes
 
 	def get_cost_of_route(self, route):
+		""" 
+		Gets the cost of a route.  
+
+		Parameters
+		----------
+		route:
+			A coute to obtain the cost with repsect to. 
+		"""
 		if len(route) == 0:
 			return 0
 		cost = 0
@@ -339,8 +423,12 @@ class BSSRPMIP(object):
 			cost += self.cost_matrix[route[i], route[i+1]]
 		return cost
 
+
 	def print_routes(self):
+		""" Prints the routes and costs.  """
 		for k in self.K:
 			print(f'Vehicle {k}:')
 			print(f'    Route:', self.routes[k])
 			print(f'    Cost:', self.get_cost_of_route(self.routes[k]), '\n')
+
+		return
