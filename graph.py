@@ -76,6 +76,7 @@ class Graph:
         # add KNN edges with random K
         W_val = squareform(pdist(coords, metric='euclidean'))
         W_val = self.get_time_based_distance_matrix(W_val)
+        self.W_full = W_val.copy()
 
         W = np.zeros((num_nodes, num_nodes))
         knns = np.argpartition(W_val, kth=num_neighbors, axis=-1)[:, num_neighbors::-1]
