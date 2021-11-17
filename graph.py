@@ -148,6 +148,8 @@ class Graph:
             
             if demands[idx] < 0:
                 if demand_sum_pos:
+                    if demands[idx] == - self.max_demand:
+                        continue
                     demands[idx] -= 1
                 else:
                     if demands[idx] == -1: # case for over -1 to 1
@@ -160,7 +162,8 @@ class Graph:
                         demands[idx] -= 1
                     demands[idx] -= 1
                 else:
-                    
+                    if demands[idx] == self.max_demand:
+                        continue
                     demands[idx] += 1
                 
         return demands
