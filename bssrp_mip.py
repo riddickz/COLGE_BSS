@@ -6,9 +6,10 @@ from graph import Graph
 
 class BSSRPMIP(object):
 
-	def __init__(self, g, solver_time_limit=1e5, tol=1e-5):
+	def __init__(self, g, use_penalties, solver_time_limit=1e5, tol=1e-5):
 
 		self.graph = g
+		self.use_penalties = use_penalties
 		self.solver_time_limit = solver_time_limit
 		self.tol = tol
 
@@ -18,6 +19,10 @@ class BSSRPMIP(object):
 		self.demands= self.graph.demands
 		self.num_vehicles = self.graph.num_vehicles
 		self.time_limit = self.graph.time_limit
+
+		# penalty constraints
+		self.penalty_cost_demand = self.graph.penalty_cost_demand
+		self.penalty_cost_time = self.graph.penalty_cost_time
 
 		# iterable lists
 		self.V = list(range(self.graph.num_nodes))
@@ -57,8 +62,11 @@ class BSSRPMIP(object):
 		self.z_vars = {} # demand vars
 		self.f_vars = {} # vehicle vars
 
-		self.alpha_vars = None # unmet demand vars
-		self.beta_vars = None # time limit vars
+		self.t_vars = None # time limit vars
+		self.d_vars = None # unmet demand vars
+		if self.use_penalties:
+			self.t_vars = {}
+			self.d_vars = {}
 
 		# add transport variables to model [x_ijk]
 		for k in self.K:
@@ -93,6 +101,18 @@ class BSSRPMIP(object):
 					f_name = f"f_{i}_{j}_{k}"
 					self.f_vars[f_name] = self.model.addVar(obj=0.0, lb=0.0, vtype=gp.GRB.INTEGER, name=f_name)
 
+		if self.use_penalties:
+			for k in self.K:
+				t_name = f"t_{k}" 
+				self.t_vars[t_name] = self.model.addVar(obj=self.penalty_cost_time, lb=0.0, vtype=gp.GRB.CONTINUOUS, name=t_name)
+
+			for k in self.K:
+				for i in self.V_0:
+					d_pos_name = f"d_pos_{i}_{k}" 
+					d_neg_name = f"d_neg_{i}_{k}" 
+					self.d_vars[d_pos_name] = self.model.addVar(obj=self.penalty_cost_demand, lb=0.0, vtype=gp.GRB.CONTINUOUS, name=d_pos_name)
+					self.d_vars[d_neg_name] = self.model.addVar(obj=self.penalty_cost_demand, lb=0.0, vtype=gp.GRB.CONTINUOUS, name=d_neg_name)
+		
 		self.var_dict = {
 			"x" : self.x_vars,
 			"y" : self.y_vars,
@@ -172,7 +192,7 @@ class BSSRPMIP(object):
 		# constraint (9)
 		for k in self.K:
 			for i in self.V_0:
-				eq_ = - self.demands[i] * self.y_vars[f"y_{i}_{k}"]
+				eq_ = 0
 				for j in self.V:
 					if i == j:
 						continue
@@ -181,6 +201,12 @@ class BSSRPMIP(object):
 					if i == h:
 						continue
 					eq_ -= self.z_vars[f"z_{h}_{i}_{k}"]
+
+				if self.use_penalties:
+					eq_ += self.d_vars[f"d_pos_{i}_{k}"]
+					eq_ -= self.d_vars[f"d_neg_{i}_{k}"]
+
+				eq_ -= self.demands[i] * self.y_vars[f"y_{i}_{k}"]
 				self.model.addConstr(eq_ == 0, name=f"9_bike_loading_{i}_{k}")
 
 	def add_time_constraints(self):
@@ -195,6 +221,8 @@ class BSSRPMIP(object):
 					eq_ += self.cost_matrix[i,j] * self.x_vars[f"x_{i}_{j}_{k}"]
 			for i in self.V_0:
 				eq_ += self.tau * np.abs(self.demands[i]) * self.y_vars[f"y_{i}_{k}"]
+			if self.use_penalties:
+				eq_ -=  self.t_vars[f"t_{k}"]
 				
 			self.model.addConstr(eq_ <= self.time_limit, name=f"10_time_{k}")
 
@@ -304,15 +332,15 @@ class BSSRPMIP(object):
 		return routes
 
 	def get_cost_of_route(self, route):
-	    if len(route) == 0:
-	        return 0
-	    cost = 0
-	    for i in range(len(route) - 1):
-	        cost += self.cost_matrix[route[i], route[i+1]]
-	    return cost
+		if len(route) == 0:
+			return 0
+		cost = 0
+		for i in range(len(route) - 1):
+			cost += self.cost_matrix[route[i], route[i+1]]
+		return cost
 
 	def print_routes(self):
 		for k in self.K:
-		    print(f'Vehicle {k}:')
-		    print(f'    Route:', self.routes[k])
-		    print(f'    Cost:', self.get_cost_of_route(self.routes[k]), '\n')
+			print(f'Vehicle {k}:')
+			print(f'    Route:', self.routes[k])
+			print(f'    Cost:', self.get_cost_of_route(self.routes[k]), '\n')
