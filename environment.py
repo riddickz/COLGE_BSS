@@ -1,8 +1,7 @@
 import numpy as np
 import torch
-import pulp
-import networkx as nx
 import matplotlib.pyplot as plt
+
 """
 This file contains the definition of the environment
 in which the agents are run.
@@ -10,133 +9,113 @@ in which the agents are run.
 
 
 class Environment:
-    def __init__(self, graph,name):
-        self.graphs = graph
-        self.name= name
+    def __init__(self, graph_dict, name):
+        self.graph_dict = graph_dict
+        self.name = name
 
     def reset(self, g):
         self.games = g
-        self.graph_init = self.graphs[self.games]
-        self.nodes = self.graph_init.nodes()
-        self.nbr_of_nodes = 0
-        self.edge_add_old = 0
-        self.last_reward = 0
-        self.observation = torch.zeros(1,self.nodes,3,dtype=torch.float)
-        self.static = self.graph_init.static # location coordinates
-        self.dynamic = self.graph_init.dynamic.int().clone()# load, demand
-        self.load_init = self.dynamic[0].clone()
-        self.demand_init = self.dynamic[1].clone()
-
-        self.prev_demands = self.graph_init.dynamic[1].clone()
-        self.observation[:,:,2] = self.dynamic[0] # load
-        self.observation[:,:,2] = self.dynamic[1] #
-        self.demand_init_tot = torch.abs(self.dynamic[1][1:]).sum()
-        self.max_load = self.graphs[self.games].max_load
+        self.graph = self.graph_dict[self.games]
+        self.dynamic = self.graph.dynamic.detach().clone()
+        self.dynamic_init = self.dynamic.detach().clone()
         self.prev_node = 0
-        self.tour_indices = []
-        self.tour_length = 0.
+        self.t_total = 0.
+        self.tour_indices = [0]
+        self.prev_demand = np.abs(self.dynamic[2, 1:]).sum()
 
-    def observe(self):
-        """Returns the current observation that the agent can make
-                 of the environment, if applicable.
-        """
-        return self.observation
+        return self.dynamic, self.graph.W_weighted  # aka state
 
-    def step(self, chosen_idx):
-
-        # # Update the dynamic elements differently for if we visit depot vs. a city
-        # chosen_idx = torch.tensor(chosen_idx)
-        # visit = chosen_idx.ne(0)
-        # depot = chosen_idx.eq(0)
+    def step(self, action):
+        chosen_idx = action.item()
+        t, reward, done = self.get_reward(chosen_idx)
 
         # Clone the dynamic variable so we don't mess up graph
-        all_loads = self.dynamic[0].clone()
-        all_demands = self.dynamic[1].clone()
+        all_loads = self.dynamic[1].clone()
+        all_demands = self.dynamic[2].clone()
 
         load = all_loads[chosen_idx]
         demand = all_demands[chosen_idx]
 
         # Loading and supplying constraint
         # if we've chosen to visit a city, try to satisfy as much demand as possible
-        new_load = torch.clamp(load - demand, max= self.max_load, min=0)
+        new_load = torch.clamp(load - demand, max=self.graph.max_load, min=0)
         if demand >= 0:
             new_demand = torch.clamp(demand - load, min=0)
         else:
-            new_demand = torch.clamp(demand + (self.max_load - load), max = 0)
+            new_demand = torch.clamp(demand + (self.graph.max_load - load), max=0)
 
-        all_loads[:] = new_load #TODO
-        all_demands[chosen_idx] = new_demand
-
-        # print("all_demands:" ,all_demands)
-        # print("all_loads:" ,all_loads)
-
-        # Updates the (observation, load, demand,node_idx,tour) values
+        # Updates the dynamic(observation, load, demand)m node_idx,tour values
         if all_demands[chosen_idx] == 0:
-            self.observation[:, chosen_idx, 0] = 1 # node is covered if demand is met
+            self.dynamic[0, chosen_idx] = 1  # node is covered if demand is met
         else:
-            self.observation[:, chosen_idx, 0] = new_demand/self.graph_init.dynamic[1][chosen_idx]
+            self.dynamic[0, chosen_idx] = 0
 
-        self.observation[:, :, 1] = new_load
-        self.observation[:, chosen_idx, 2] = new_demand
+        self.dynamic[1] = new_load
+        self.dynamic[2, chosen_idx] = new_demand
+        self.dynamic[3, :] = 0  # current node
+        self.dynamic[3, chosen_idx] = 1
+        self.dynamic[4, :] = 0  # previous node
+        self.dynamic[4, self.prev_node] = 1
 
-        self.dynamic[0] = all_loads
-        self.dynamic[1] = all_demands
+        if (self.dynamic[5].sum() >= self.graph.time_limit):
+            self.dynamic[5, :] = 0
+            back_depot = True
+        else:
+            self.dynamic[5, chosen_idx] = t  # previous node
+            back_depot = False
 
-        reward = self.get_reward(chosen_idx)
-
-        self.prev_demands[chosen_idx] = new_demand
         self.prev_node = chosen_idx
+        self.t_total += t.item()
         self.tour_indices.append(chosen_idx)
-        return reward
+
+        info = (self.prev_node, self.t_total, self.tour_indices, back_depot)
+
+        return (self.dynamic, reward, done, info)
 
     def get_reward(self, chosen_idx):
-        done=False
-        loc_prev = self.static[self.prev_node]
-        loc = self.static[chosen_idx]
-        dist = (loc_prev-loc).norm()
-        self.tour_length += dist
+        done = False
+        prev_node = torch.where(self.dynamic[4] == 1)
 
-        demand = np.abs(self.dynamic[1][1:]).sum()
-        demand_change = np.abs(self.dynamic[1] - self.prev_demands).sum()
+        t = self.graph.W_weighted[chosen_idx, prev_node]
 
-        reward = - dist/30*120 + demand_change
+        demand = np.abs(self.dynamic[2, 1:]).sum()
+        demand_chg = self.prev_demand - demand
+        reward = - t + demand_chg
+        # print(t, demand_chg)
 
+        self.prev_demand = demand
 
-        dist_limit = bool(self.tour_length >= 3*60) #TODO: total dist limit: 3 car x 120 min at 30km/h
+        # Terminal State
+        timeout = bool(self.t_total >= self.graph.time_limit * self.graph.num_vehicles)
+        full_visit = (self.dynamic[0] != 0).all()
 
-        # Termination Criteria
-        if demand == 0 or (self.observation[:, :, 0] != 0).all() or dist_limit:
-            if dist_limit:
-                print("TIMEOUT")
-
-            dist_depot= (loc - self.static[0]).norm() # add distance back to depot
-            self.tour_length += dist_depot
-
-            demand_penalty = torch.abs(self.demand_init - self.dynamic[1]).sum()
-
-            reward -= (dist_depot/30*120 + demand_penalty) # t_ij * x_ijk + β(p_b+ + p_b−)
+        if timeout or full_visit or demand == 0:
+            time_depot = self.graph.W_weighted[0, chosen_idx]  # travel back to depot
+            reward -= (time_depot + demand)  # t_ij * x_ijk + β(p_b+ + p_b−)
+            self.t_total += time_depot
+            self.tour_indices.append(0)
             done = True
 
+            if timeout:
+                print("TIMEOUT!")
+
             print("Tour: ", self.tour_indices)
-            print("Tour Length: ", self.tour_length.item() )
+            print("Tour Time Cost: ", self.t_total.item())
+            print("Left Demand: ", demand)
             print("Node Visits: ", len(self.tour_indices))
-            print("Games Finished: ", self.games )
-            print("#"*100)
-            # visualize_2D(self.graph_init.static.numpy(), self.graph_init.W)
-            # nx.draw(self.graph_init.g, with_labels=True)
-            # plt.show()
-        # print("demand_penalty: ", demand_penalty)
+            print("Games Finished: ", self.games)
+            print("#" * 100)
         # print("visit node:{}, reward:{}, done:{}:".format(chosen_idx, reward, done))
         # print("#"*100)
-        return (reward, done)
+        return t, reward, done
 
     def render(self, save_path=None):
         """Plots the found solution."""
         plt.ion()
         plt.figure(0, figsize=(7, 7))
 
-        nodes = self.graph_init.static.numpy()
-        W = self.graph_init.W
+        nodes = self.graph.static.numpy()
+        W = self.graph.W
 
         # Plot nodes
         colors = ['red']  # First node as depot
@@ -172,7 +151,7 @@ class Environment:
 
         # Show dynamic
         for i, (x, y) in enumerate(zip(xs, ys)):
-            label = "N{}: {}/{}".format(i, self.dynamic[1][i].int(),self.graph_init.dynamic[1][i].int())
+            label = "N{}: {}/{}".format(i, self.dynamic[2][i].int(), self.dynamic_init[2][i].int())
             plt.annotate(label,  # this is the text
                          (x, y),  # these are the coordinates to position the label
                          textcoords="offset points",  # how to position the text
@@ -183,9 +162,8 @@ class Environment:
 
         plt.xlabel('X')
         plt.ylabel('Y')
+        plt.title("Game {}".format(self.games))
         plt.pause(0.001)
         plt.close()
 
         # plt.savefig(save_path, bbox_inches='tight', dpi=200)
-
-

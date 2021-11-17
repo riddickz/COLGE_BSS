@@ -4,138 +4,67 @@ This is the machinnery that runs your agent in an environment.
 """
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 import agent
 from utils.vis import plot_reward
 
+
 class Runner:
-    def __init__(self, environment, agent, verbose=False, render = True):
-        self.environment = environment
+    def __init__(self, environment, agent, verbose=False, render=True):
+        self.env = environment
         self.agent = agent
         self.verbose = verbose
         self.render_on = render
 
-    def step(self):
-        observation = self.environment.observe().clone()
-        action = self.agent.act(observation, self.environment.dynamic, self.environment.tour_length)
-        (reward, done) = self.environment.step(action)
-        self.agent.reward(observation, action, reward,done)
-        return (observation, action, reward, done)
+    def train(self, g, max_iter):
+        cumul_reward = []
+        for i_episode in range(20):  # TODO: change hardcode
+            # play 20 episodes of BSS game on one graph
+            s, w_weighted = self.env.reset(g)
+            adj_weighted = w_weighted.clone().detach()
+            back_depot = False
+            ep_r = 0
 
-    def loop(self, games,nbr_epoch, max_iter):
+            for i in range(0, max_iter):
+                a = self.agent.choose_action(s, adj_weighted, back_depot)
 
-        cumul_reward = 0.0
-        list_cumul_reward=[]
-        # list_optimal_ratio = []
-        # list_aprox_ratio =[]
+                # obtain the reward and next state and some other information
+                s_, r, done, info = self.env.step(a)
+                back_depot = info[3]
 
-        for epoch_ in range(nbr_epoch):
-            print(" -> epoch : "+str(epoch_))
-            for g in range(1, games + 1):
-                print(" -> games : "+str(g))
-                for epoch in range(20): #TODO: repeat one graph 20x
-                    self.environment.reset(g)
-                    self.agent.reset(g)
-                    cumul_reward = 0.0
+                # Store the transition in memory
+                self.agent.memory.push(s, a, r, s_, w_weighted)
+                self.agent.memory_counter += 1
 
-                    for i in range(1, max_iter + 1):
-                        # if self.verbose:
-                        #   print("Simulation step {}:".format(i))
-                        (obs, act, rew, done) = self.step()
-                        cumul_reward += rew
-                        if self.verbose:
-                            # print(" ->       observation: {}".format(obs))
-                            # print(" ->            action: {}".format(act))
-                            # print(" ->            reward: {}".format(rew))
-                            # print(" -> cumulative reward: {}".format(cumul_reward))
-                            if done:
-                                # #solution from baseline algorithm
-                                # approx_sol =self.environment.get_approx()
-                                #
-                                # #optimal solution
-                                # optimal_sol = self.environment.get_optimal_sol()
+                ep_r += r.item()
 
-                                # print cumulative reward of one play, it is actually the solution found by the NN algorithm
-                                print(" ->    Terminal event: cumulative rewards = {}".format(cumul_reward))
+                # if the experience repaly buffer is filled, DQN begins to learn or update its parameters
+                if self.agent.memory_counter > self.agent.MEMORY_CAPACITY:
+                    self.agent.learn()
+                    if done:
+                        print('Ep: ', i_episode, ' |', 'Ep_r: ', round(ep_r, 2))
 
-                                # #print optimal solution
-                                # print(" ->    Optimal solution = {}".format(optimal_sol))
-
-                                #we add in a list the solution found by the NN algorithm
-                                list_cumul_reward.append(-cumul_reward)
-
-                                # #we add in a list the ratio between the NN solution and the optimal solution
-                                # list_optimal_ratio.append(cumul_reward/(optimal_sol))
-                                #
-                                # #we add in a list the ratio between the NN solution and the baseline solution
-                                # list_aprox_ratio.append(cumul_reward/(approx_sol))
-
-                        if done:
-                            break
-                    if self.render_on:
-                        self.environment.render()
-                        # plot_reward(list_cumul_reward)
-
-                # np.savetxt('test_'+str(epoch_)+'.out', list_optimal_ratio, delimiter=',')
-                # np.savetxt('test_approx_' + str(epoch_) + '.out', list_aprox_ratio, delimiter=',')
-
-
-            if self.verbose:
-                print(" <=> Finished game number: {} <=>".format(g))
-                print("")
-
-        np.savetxt('test.out', list_cumul_reward, delimiter=',')
-        # np.savetxt('opt_set.out', list_optimal_ratio, delimiter=',')
-        plt.plot(list_cumul_reward)
-        plt.show()
+                if done:
+                    # if game is over, then skip the while loop.
+                    print(" ->    Terminal event: episodic cumulative rewards = {}".format(ep_r))
+                    break
+                # use next state to update the current state.
+                s = s_
+            if self.render_on:
+                self.env.render()
         return cumul_reward
 
-def iter_or_loopcall(o, count):
-    if callable(o):
-        return [ o() for _ in range(count) ]
-    else:
-        # must be iterable
-        return list(iter(o))
+    def loop(self, games, nbr_epoch, max_iter):
+        cumul_reward_list = []
 
-class BatchRunner:
-    """
-    Runs several instances of the same RL problem in parallel
-    and aggregates the results.
-    """
+        # Start training
+        print("\nCollecting experience...")
+        for epoch_ in range(nbr_epoch):
+            print(" -> epoch : " + str(epoch_))
+            for g in range(1, games + 1):
+                print(" -> games : " + str(g))
+                cumul_reward = self.train(g, max_iter)
+                cumul_reward_list.extend(cumul_reward)
 
-    def __init__(self, env_maker, agent_maker, count, verbose=False):
-        self.environments = iter_or_loopcall(env_maker, count)
-        self.agents = iter_or_loopcall(agent_maker, count)
-        assert(len(self.agents) == len(self.environments))
-        self.verbose = verbose
-        self.ended = [ False for _ in self.environments ]
-
-    def game(self, max_iter):
-        rewards = []
-        for (agent, env) in zip(self.agents, self.environments):
-            env.reset()
-            agent.reset()
-            game_reward = 0
-            if self.render_on:
-                env.render()
-            for i in range(1, max_iter+1):
-                observation = env.observe()
-                action = agent.act(observation)
-                (reward, stop) = env.step(action)
-                agent.reward(observation, action, reward)
-                game_reward += reward
-                if stop :
-                    break
-            rewards.append(game_reward)
-        return sum(rewards)/len(rewards)
-
-    def loop(self, games,nb_epoch, max_iter):
-        cum_avg_reward = 0.0
-        for epoch in range(nb_epoch):
-            for g in range(1, games+1):
-                avg_reward = self.game(max_iter)
-                cum_avg_reward += avg_reward
                 if self.verbose:
-                    print("Simulation game {}:".format(g))
-                    print(" ->            average reward: {}".format(avg_reward))
-                    print(" -> cumulative average reward: {}".format(cum_avg_reward))
-        return cum_avg_reward
+                    print(" <=> Finished game number: {} <=>\n".format(g))

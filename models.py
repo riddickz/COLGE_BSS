@@ -477,14 +477,14 @@ class GCN_QN_1(torch.nn.Module):
         self.len_pre_pooling = len_pre_pooling
         self.len_post_pooling = len_post_pooling
 
-
-        self.mu_1 = torch.nn.Parameter(torch.Tensor(3, embed_dim))
+        self.ft = 6
+        self.mu_1 = torch.nn.Parameter(torch.Tensor(self.ft, embed_dim))
         torch.nn.init.normal_(self.mu_1, mean=0, std=0.01)
 
         self.mu_2 = torch.nn.Linear(embed_dim, embed_dim, True)
         torch.nn.init.normal_(self.mu_2.weight, mean=0, std=0.01)
 
-        self.mu_3 = torch.nn.Linear(3, 1, True)
+        self.mu_3 = torch.nn.Linear(self.ft, 1, True)
 
         self.list_pre_pooling = []
         for i in range(self.len_pre_pooling):
@@ -512,6 +512,11 @@ class GCN_QN_1(torch.nn.Module):
         torch.nn.init.normal_(self.q.weight, mean=0, std=0.01)
 
     def forward(self, xv, adj):
+        if len(xv.size()) <3:
+            xv = xv.permute(1, 0).unsqueeze(0) #torch.Size([1, 10, 6])
+            adj = adj.unsqueeze(0).float() # torch.Size([1, 10, 10])
+        else:
+            xv = torch.permute(xv, (0,2,1))
 
         minibatch_size = xv.shape[0]
         nbr_node = xv.shape[1]
@@ -551,7 +556,10 @@ class GCN_QN_1(torch.nn.Module):
                 for i in range(self.len_pre_pooling):
                     mu = self.list_pre_pooling[i](mu).clamp(0)
 
-                mu_pool = torch.matmul(gv, mu)
+                try:
+                    mu_pool = torch.matmul(gv, mu)
+                except:
+                    print()
 
                 for i in range(self.len_post_pooling):
 
