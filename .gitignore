@@ -9,3 +9,8 @@
 /.idea/shelf/Changes1/shelved.patch
 /tgcn.py
 /.idea/workspace.xml
+
+
+.ipynb_checkpoints/
+__pycache__/
+ *.lp
