@@ -22,6 +22,7 @@ class Environment:
         self.t_total = 0.
         self.tour_indices = [0]
         self.prev_demand = np.abs(self.dynamic[2, 1:]).sum()
+        self.trip_count = 0
 
         return self.dynamic, self.graph.W_weighted  # aka state
 
@@ -44,12 +45,13 @@ class Environment:
         else:
             new_demand = torch.clamp(demand + (self.graph.max_load - load), max=0)
 
-        # Updates the dynamic(observation, load, demand)m node_idx,tour values
-        if all_demands[chosen_idx] == 0:
-            self.dynamic[0, chosen_idx] = 1  # node is covered if demand is met
-        else:
-            self.dynamic[0, chosen_idx] = 0
+        # # Updates the dynamic(observation, load, demand)m node_idx,tour values
+        # if all_demands[chosen_idx] == 0:
+        #     self.dynamic[0, chosen_idx] = 1  # node is covered if demand is met
+        # else:
+        #     self.dynamic[0, chosen_idx] = 0
 
+        self.dynamic[0, chosen_idx] = 1
         self.dynamic[1] = new_load
         self.dynamic[2, chosen_idx] = new_demand
         self.dynamic[3, :] = 0  # current node
@@ -67,6 +69,8 @@ class Environment:
         self.prev_node = chosen_idx
         self.t_total += t.item()
         self.tour_indices.append(chosen_idx)
+        if chosen_idx == 0:
+            self.trip_count += 1
 
         info = (self.prev_node, self.t_total, self.tour_indices, back_depot)
 
@@ -79,8 +83,9 @@ class Environment:
         t = self.graph.W_weighted[chosen_idx, prev_node]
 
         demand = np.abs(self.dynamic[2, 1:]).sum()
-        demand_chg = self.prev_demand - demand
-        reward = - t + demand_chg
+        # demand_chg = self.prev_demand - demand
+        # reward = - t + demand_chg
+        reward = - t
         # print(t, demand_chg)
 
         self.prev_demand = demand
@@ -89,7 +94,7 @@ class Environment:
         timeout = bool(self.t_total >= self.graph.time_limit * self.graph.num_vehicles)
         full_visit = (self.dynamic[0] != 0).all()
 
-        if timeout or full_visit or demand == 0:
+        if timeout or full_visit or demand == 0: #or self.trip_count ==3:
             time_depot = self.graph.W_weighted[0, chosen_idx]  # travel back to depot
             reward -= (time_depot + demand)  # t_ij * x_ijk + β(p_b+ + p_b−)
             self.t_total += time_depot

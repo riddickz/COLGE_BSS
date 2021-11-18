@@ -10,7 +10,7 @@ from utils.vis import plot_reward
 
 
 class Runner:
-    def __init__(self, environment, agent, verbose=False, render=True):
+    def __init__(self, environment, agent, verbose=False, render=False):
         self.env = environment
         self.agent = agent
         self.verbose = verbose
@@ -39,7 +39,7 @@ class Runner:
                 ep_r += r.item()
 
                 # if the experience repaly buffer is filled, DQN begins to learn or update its parameters
-                if self.agent.memory_counter > self.agent.MEMORY_CAPACITY:
+                if self.agent.memory_counter > self.agent.mem_capacity:
                     self.agent.learn()
                     if done:
                         print('Ep: ', i_episode, ' |', 'Ep_r: ', round(ep_r, 2))

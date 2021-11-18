@@ -556,10 +556,7 @@ class GCN_QN_1(torch.nn.Module):
                 for i in range(self.len_pre_pooling):
                     mu = self.list_pre_pooling[i](mu).clamp(0)
 
-                try:
-                    mu_pool = torch.matmul(gv, mu)
-                except:
-                    print()
+                mu_pool = torch.matmul(gv, mu)
 
                 for i in range(self.len_post_pooling):
 

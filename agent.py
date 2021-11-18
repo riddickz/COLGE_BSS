@@ -30,7 +30,6 @@ class ReplayMemory(object):
         self.memory = deque([], maxlen=capacity)
 
     def push(self, *args):
-        """Save a transition"""
         self.memory.append(Transition(*args))
 
     def sample(self, batch_size):
@@ -49,7 +48,7 @@ class DQAgent:
 
         self.k = 20
         self.alpha = 0.1
-        self.gamma = 1  # 0.99
+        self.gamma = 0.99  # 0.99
         self.lambd = 0.
 
         self.epsilon_ = 0.8
@@ -59,8 +58,8 @@ class DQAgent:
         self.T = 5
         self.t = 1
 
-        self.TARGET_NETWORK_REPLACE_FREQ = 10  # How frequently target netowrk updates
-        self.MEMORY_CAPACITY = 2000  # The capacity of experience replay buffer
+        self.target_net_replace_freq = 20  # How frequently target netowrk updates
+        self.mem_capacity = 2000  # The capacity of experience replay buffer
 
         if self.model_name == 'GCN_QN_1':
             args_init = load_model_config()[self.model_name]
@@ -71,7 +70,7 @@ class DQAgent:
         self.memory_counter = 0  # counter used for experience replay buffer
 
         # # ----Define the memory (or the buffer), allocate some space to it. The number
-        self.memory = ReplayMemory(self.MEMORY_CAPACITY)
+        self.memory = ReplayMemory(self.mem_capacity)
 
         # ------- Define the optimizer------#
         self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr)
@@ -81,7 +80,7 @@ class DQAgent:
 
     def choose_action(self, state, adj_weighted, back_depot):
         # Clone the dynamic variable so we don't mess up graph
-        observation = state[0]
+        observation = state[0].int()
         loads = state[1]
         demands = state[2]
         cur_node = (state[3] == 1).nonzero().item()
@@ -95,15 +94,19 @@ class DQAgent:
         # mask *= all_demands.lt(all_loads)
         # mask *= (-all_demands).lt(20 - all_loads)
 
-        nbr_nodes = (adj_weighted[cur_node] != 0).int()
+        nbr_nodes = (adj_weighted[cur_node] > 0).int()
         uncovered_nodes = (observation[:] == 0).int()
         mask = nbr_nodes * uncovered_nodes
         mask[0] = 1  # depot is always available unless last visit
-        mask[last_node] = 0  # mask out visited node
+        mask[last_node] = 0
+        mask[cur_node] =  0 # mask out visited node
 
         # Time limit constraint: all vehicles must start at the depot and return to the depot within a limited time.
-        if back_depot and (last_node != 0):  # TODO: hardcore  return to depot after traveling 120 min at 30km/h
-            action = torch.tensor([0])  # return to depot
+        if back_depot and (last_node > 0) and (cur_node > 0):  # TODO: hardcore  return to depot after traveling 120 min at 30km/h
+            action = torch.tensor([0])
+            # if action == cur_node or action == last_node:
+            #     print(last_node,cur_node)
+            #     print()
 
         elif self.epsilon_ > torch.rand(1):
             if (nbr_nodes * mask == 1).any():  # if there is node neighbor to go
@@ -127,7 +130,7 @@ class DQAgent:
         # when and how to update parameters of target network
 
         # update the target network every fixed steps
-        if self.learn_step_counter % self.TARGET_NETWORK_REPLACE_FREQ == 0:
+        if self.learn_step_counter % self.target_net_replace_freq == 0:
             # Assign the parameters of eval_net to target_net
             self.target_net.load_state_dict(self.policy_net.state_dict())
         self.learn_step_counter += 1
@@ -163,7 +166,7 @@ class DQAgent:
 
     def save_model(self):
         cwd = os.getcwd()
-        torch.save(self.model.state_dict(), cwd + '/model.pt')
+        torch.save(self.policy_net.state_dict(), cwd + '/model.pt')
 
 
 Agent = DQAgent
