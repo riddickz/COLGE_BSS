@@ -9,10 +9,11 @@ from torch_geometric_temporal.nn.recurrent import GConvGRU
 from torch_geometric.utils import from_scipy_sparse_matrix
 import torch
 import torch.nn as nn
+import torch_geometric as tg
+from torch_geometric.nn import GCN2Conv,GCNConv
+from torch.nn import Linear
 from torch.autograd import Variable
 from torch.nn.parameter import Parameter
-import math
-from torch_geometric.nn import GCNConv
 
 class RecurrentGCN(torch.nn.Module):
 
@@ -579,16 +580,78 @@ class GCN_QN_1(torch.nn.Module):
             q = self.q(q_)
         return q
 
-# A = to_numpy_matrix(zkc, nodelist=order)
-# I = np.eye(zkc.number_of_nodes())
-#
-# A_hat = A + I
-# D_hat = np.array(np.sum(A_hat, axis=0))[0]
-# D_hat = np.matrix(np.diag(D_hat))
-# def gcn_layer(A_hat, D_hat, X, W):
-#     return relu(D_hat**-1 * A_hat * X * W)
-#
-# H_1 = gcn_layer(A_hat, D_hat, I, W_1)
-# H_2 = gcn_layer(A_hat, D_hat, H_1, W_2)
-#
-# output = H_2
+class GCN_Naive(torch.nn.Module):
+    def __init__(self,input_channels,output_channels,hidden_channels):
+        super(GCN_Naive, self).__init__()
+        self.conv1 = GCNConv(input_channels, hidden_channels, normalize=True)
+        self.conv2 = GCNConv(hidden_channels, output_channels, normalize=True)
+
+    def forward(self, x, edge_index, edge_weight):
+        x = F.relu(self.conv1(x, edge_index, edge_weight))
+        x = F.dropout(x, training=self.training)
+        x = self.conv2(x, edge_index, edge_weight)
+        return x
+
+class GCN(torch.nn.Module):
+    def __init__(self, input_dim, feature_dim, hidden_dim, output_dim,edge_weight,
+                 feature_pre=True, layer_num=2, dropout=True, **kwargs):
+        super(GCN, self).__init__()
+        self.feature_pre = feature_pre
+        self.layer_num = layer_num
+        self.dropout = dropout
+        if feature_pre:
+            self.linear_pre = nn.Linear(input_dim, feature_dim)
+            self.conv_first = tg.nn.GCNConv(feature_dim, hidden_dim, edge_weight)
+        else:
+            self.conv_first = tg.nn.GCNConv(input_dim, hidden_dim)
+        self.conv_hidden = nn.ModuleList([tg.nn.GCNConv(hidden_dim, hidden_dim) for i in range(layer_num - 2)])
+        self.conv_out = tg.nn.GCNConv(hidden_dim, output_dim)
+
+    def forward(self, data):
+        x, edge_index = data.x, data.edge_index
+        if self.feature_pre:
+            x = self.linear_pre(x)
+        x = self.conv_first(x, edge_index)
+        x = F.relu(x)
+        if self.dropout:
+            x = F.dropout(x, training=self.training)
+        for i in range(self.layer_num-2):
+            x = self.conv_hidden[i](x, edge_index)
+            x = F.relu(x)
+            if self.dropout:
+                x = F.dropout(x, training=self.training)
+        x = self.conv_out(x, edge_index)
+        x = F.normalize(x, p=2, dim=-1)
+        return x
+
+class GCN2_Net(torch.nn.Module):
+    def __init__(self, input_channels, output_channels, hidden_channels, num_layers, alpha, theta,
+                 shared_weights=True, dropout=0.0):
+        super(GCN2_Net, self).__init__()
+        self.lins = torch.nn.ModuleList()
+        self.lins.append(Linear(input_channels, hidden_channels))
+        self.lins.append(Linear(hidden_channels, output_channels))
+
+        self.convs = torch.nn.ModuleList()
+
+        for layer in range(num_layers):
+            self.convs.append(
+                GCN2Conv(hidden_channels, alpha, theta, layer + 1,
+                         shared_weights,normalize=True))
+
+        self.dropout = dropout
+
+
+    def forward(self, x, edge_index, edge_weight):
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = x_0 = self.lins[0](x).relu()
+
+        for conv in self.convs:
+            x = F.dropout(x, self.dropout, training=self.training)
+            x = conv(x, x_0, edge_index, edge_weight)
+            x = x.relu()
+
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = self.lins[1](x)
+
+        return x

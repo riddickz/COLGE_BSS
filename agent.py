@@ -6,6 +6,8 @@ import models
 from utils.config import load_model_config
 import torch
 from collections import namedtuple, deque
+from torch_geometric.utils import from_scipy_sparse_matrix
+from torch.nn.utils.rnn import pad_sequence
 
 # Set up logger
 logging.basicConfig(
@@ -18,11 +20,10 @@ Contains the definition of the agent that will run in an
 environment.
 """
 
-BATCH_SIZE = 64  # batch size of sampling process from buffer
+BATCH_SIZE = 32  # batch size of sampling process from buffer
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'reward', 'next_state', 'w_weight'))
-
+                        ('state', 'action', 'reward', 'next_state', 'w_weight', 'edge_index', 'edge_weight'))
 
 class ReplayMemory(object):
 
@@ -59,11 +60,15 @@ class DQAgent:
         self.t = 1
 
         self.target_net_replace_freq = 20  # How frequently target netowrk updates
-        self.mem_capacity = 2000  # The capacity of experience replay buffer
+        self.mem_capacity = 2000 # capacity of experience replay buffer
 
-        if self.model_name == 'GCN_QN_1':
-            args_init = load_model_config()[self.model_name]
-            self.policy_net, self.target_net = models.GCN_QN_1(**args_init), models.GCN_QN_1(**args_init)
+        # if self.model_name == 'GCN_QN_1':
+        #     args_init = load_model_config()[self.model_name]
+        #     self.policy_net, self.target_net = models.GCN_QN_1(**args_init), models.GCN_QN_1(**args_init)
+        self.policy_net = models.GCN2_Net(input_channels=6, output_channels=1, hidden_channels=6, num_layers=10, alpha=0.1,
+                         theta=0.5, shared_weights=True, dropout=0.6)
+        self.target_net = models.GCN2_Net(input_channels=6, output_channels=1, hidden_channels=6, num_layers=10, alpha=0.1,
+                         theta=0.5, shared_weights=True, dropout=0.6)
 
         # Define counter, memory size and loss function
         self.learn_step_counter = 0  # count the steps of learning process
@@ -78,7 +83,7 @@ class DQAgent:
         # ------Define the loss function-----#
         self.criterion = torch.nn.MSELoss(reduction='sum')
 
-    def choose_action(self, state, adj_weighted, back_depot):
+    def choose_action(self, state, w_weighted, edge_index, edge_weight, back_depot):
         # Clone the dynamic variable so we don't mess up graph
         observation = state[0].int()
         loads = state[1]
@@ -94,7 +99,7 @@ class DQAgent:
         # mask *= all_demands.lt(all_loads)
         # mask *= (-all_demands).lt(20 - all_loads)
 
-        nbr_nodes = (adj_weighted[cur_node] > 0).int()
+        nbr_nodes = (w_weighted[cur_node] > 0).int()
         uncovered_nodes = (observation[:] == 0).int()
         mask = nbr_nodes * uncovered_nodes
         mask[0] = 1  # depot is always available unless last visit
@@ -104,9 +109,6 @@ class DQAgent:
         # Time limit constraint: all vehicles must start at the depot and return to the depot within a limited time.
         if back_depot and (last_node > 0) and (cur_node > 0):  # TODO: hardcore  return to depot after traveling 120 min at 30km/h
             action = torch.tensor([0])
-            # if action == cur_node or action == last_node:
-            #     print(last_node,cur_node)
-            #     print()
 
         elif self.epsilon_ > torch.rand(1):
             if (nbr_nodes * mask == 1).any():  # if there is node neighbor to go
@@ -115,13 +117,10 @@ class DQAgent:
                 action = torch.tensor([0])  # return to depot
 
         else:
-            q_a = self.policy_net(state, adj_weighted).detach().clone()
-            action = torch.argmax(q_a[0, :, 0] + (1 - mask) * self.neg_inf).reshape(1)
+            q_a = self.policy_net(state.T, edge_index, edge_weight).detach().clone()
+            # q_a = self.policy_net(state.T.unsqueeze(0), edge_index.unsqueeze(0), edge_weight.unsqueeze(0)).detach().clone()
 
-            # q_a = self.model(observation, self.graphs[self.games].A).detach().clone()
-            # edge_index, edge_weight = from_scipy_sparse_matrix(self.graphs[self.games].A)
-            # q_a = self.model(observation.squeeze(0), edge_index, edge_weight.float()).detach().clone()
-            # q_a = q_a.unsqueeze(0)
+            action = torch.argmax(q_a[:,0] + (1 - mask) * self.neg_inf).reshape(1)
 
         return action
 
@@ -138,24 +137,39 @@ class DQAgent:
         # # Determine the Sampled batch from buffer
         transitions = self.memory.sample(BATCH_SIZE)
         batch = Transition(*zip(*transitions))
+
+        # TODO: BATCH TRAIN  https://github.com/pyg-team/pytorch_geometric/issues/973
+        # https://colab.research.google.com/github/phlippe/uvadlc_notebooks/blob/master/docs/tutorial_notebooks/tutorial7/GNN_overview.ipynb
+
         # Compute a mask of non-final states and concatenate the batch elements
         # (a final state would've been the one after which simulation ended)
-        b_s = torch.stack(batch.state).float()  # torch.Size([1, 10, 6])
-        b_a = torch.stack(batch.action)
-        b_r = torch.stack(batch.reward)
-        b_s_ = torch.stack(batch.next_state).float()
-        b_w_weight = torch.stack(batch.w_weight).float()
+        # b_s = torch.stack(batch.state).permute(0,2,1).float()  # torch.Size([1, 10, 6])
+        # b_a = torch.stack(batch.action)
+        # b_r = torch.stack(batch.reward)
+        # b_s_ = torch.stack(batch.next_state).permute(0,2,1).float()
+        # b_w_weight = torch.stack(batch.w_weight).float()
+        # b_edge_index = pad_sequence(list(batch.edge_index), padding_value=0).permute(1,2,0).long()
+        # b_edge_weight = pad_sequence(list(batch.edge_weight), padding_value=0).T.float()
 
-        # calculate the Q value of state-action pair
-        a_idx = b_a.unsqueeze(1).repeat(1, b_w_weight.shape[1], 1)
-        q_eval = self.policy_net(b_s, b_w_weight).gather(1, a_idx)[:, 0, :]
-        # calculate the q value of next state
-        q_next = self.target_net(b_s_, b_w_weight).detach()  # detach from computational graph, don't back propagate
-        # select the maximum q value
-        # q_next.max(1) returns the max value along the axis=1 and its corresponding index
-        q_target = (b_r + self.gamma * q_next.max(1)[0].view(BATCH_SIZE, 1)).float()  # (batch_size, 1)
+        # # calculate the Q value of state-action pair
+        # a_idx = b_a.unsqueeze(1).repeat(1, b_w_weight.shape[1], 1)
+        # q_eval = self.policy_net(b_s,b_edge_index,b_edge_weight).gather(1, a_idx)[:, 0, :]
+        # # calculate the q value of next state
+        # q_next = self.target_net(b_s_,b_edge_index,b_edge_weight).detach()  # detach from computational graph, don't back propagate
+        # # select the maximum q value
+        # # q_next.max(1) returns the max value along the axis=1 and its corresponding index
+        # q_target = (b_r + self.gamma * q_next.max(1)[0].view(BATCH_SIZE, 1)).float()  # (batch_size, 1)
+        # loss = self.criterion(q_eval, q_target)
+
+        q_eval = torch.zeros(BATCH_SIZE)
+        q_target = torch.zeros(BATCH_SIZE)
+
+        for i in range(BATCH_SIZE):
+            q_eval[i] = self.policy_net(batch.state[i].T, batch.edge_index[i], batch.edge_weight[i])[batch.action[i]]
+            q_next = self.target_net(batch.next_state[i].T, batch.edge_index[i], batch.edge_weight[i]).detach()  # detach from computational graph, don't back propagate
+            q_target[i] = (batch.reward[i] + self.gamma * q_next.max()).float()
+
         loss = self.criterion(q_eval, q_target)
-
         self.optimizer.zero_grad()  # reset the gradient to zero
         loss.backward()
         self.optimizer.step()  # execute back propagation for one step

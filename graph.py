@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import os
 import torch
 from scipy import sparse
+from torch_geometric.utils import from_scipy_sparse_matrix
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
@@ -50,12 +51,13 @@ class Graph:
 
     def gen_instance(self):  # Generate random instance
 
-        locations = self.rng.rand(self.num_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
+        self.locations = self.rng.rand(self.num_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
         # pca = PCA(n_components=2)  # center & rotate coordinates
         # locations = pca.fit_transform(coords)
+        self.refresh_demand()
 
+    def refresh_demand(self):
         self.demands = self.get_demands()
-
         demands_tensor = torch.tensor(self.demands)
         cur_node = torch.zeros(self.num_nodes)
         prev_node = torch.zeros(self.num_nodes)
@@ -64,7 +66,7 @@ class Graph:
         trip_time = torch.zeros(self.num_nodes)
         loads = torch.zeros(self.num_nodes)
 
-        self.static = torch.tensor(locations)
+        self.static = torch.tensor(self.locations)
         self.observation = torch.zeros(self.num_nodes)
         self.dynamic = torch.stack((self.observation, loads, demands_tensor, cur_node, prev_node,trip_time),
                                    dim=0)
@@ -103,7 +105,8 @@ class Graph:
         self.W, self.W_val = self.adjacenct_gen(self.num_nodes, self.num_neighbors, self.static)
         self.W_weighted = torch.tensor(np.multiply(self.W_val, self.W))
         self.A = sparse.csr_matrix(self.W_weighted)
-        self.g = nx.from_numpy_matrix(np.matrix(self.W_weighted), create_using=nx.Graph)
+        self.g = nx.from_numpy_matrix(np.matrix(self.W), create_using=nx.Graph)
+        self.g_weighted = nx.from_numpy_matrix(np.matrix(self.W_weighted), create_using=nx.Graph)
         self.g.edges(data=True)
 
     def nodes(self):
@@ -125,6 +128,12 @@ class Graph:
     def adj(self):
 
         return nx.adjacency_matrix(self.g)
+
+    def get_state(self):
+        edge_index, edge_weight = from_scipy_sparse_matrix(self.A)
+        edge_index = edge_index.long()
+        edge_weight = edge_weight.float()
+        return edge_index,edge_weight
 
     def get_demands(self):
         """ Gets random demand vector that has zero sum. """
@@ -180,7 +189,8 @@ def test():
         speed=30,
         time_limit=120)
     nx.draw(g.g, with_labels=True)
-    plt.show()
+    edge_index, edge_weight = g.get_state()
+    print(edge_index)
 
 
 if __name__ == "__main__":

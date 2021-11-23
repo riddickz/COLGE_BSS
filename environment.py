@@ -23,8 +23,14 @@ class Environment:
         self.tour_indices = [0]
         self.prev_demand = np.abs(self.dynamic[2, 1:]).sum()
         self.trip_count = 0
+        self.edge_index,self.edge_weight= self.graph.get_state()
+        return self.dynamic, self.graph.W_weighted, self.edge_index,self.edge_weight
 
-        return self.dynamic, self.graph.W_weighted  # aka state
+    def demand_reset(self):
+        self.graph.refresh_demand()
+        self.dynamic = self.graph.dynamic.detach().clone()
+        self.dynamic_init = self.dynamic.detach().clone()
+        return self.dynamic
 
     def step(self, action):
         chosen_idx = action.item()
