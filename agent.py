@@ -23,7 +23,7 @@ environment.
 BATCH_SIZE = 32  # batch size of sampling process from buffer
 
 Transition = namedtuple('Transition',
-                        ('state', 'action', 'reward', 'next_state', 'w_weight', 'edge_index', 'edge_weight'))
+                        ('state', 'action', 'reward', 'next_state', 'w_weight', 'edge_index'))
 
 class ReplayMemory(object):
 
@@ -65,9 +65,9 @@ class DQAgent:
         # if self.model_name == 'GCN_QN_1':
         #     args_init = load_model_config()[self.model_name]
         #     self.policy_net, self.target_net = models.GCN_QN_1(**args_init), models.GCN_QN_1(**args_init)
-        self.policy_net = models.GCN2_Net(input_channels=6, output_channels=1, hidden_channels=6, num_layers=10, alpha=0.1,
+        self.policy_net = models.GCN2_Net(input_channels=8, output_channels=1, hidden_channels=8, num_layers=10, alpha=0.1,
                          theta=0.5, shared_weights=True, dropout=0.6)
-        self.target_net = models.GCN2_Net(input_channels=6, output_channels=1, hidden_channels=6, num_layers=10, alpha=0.1,
+        self.target_net = models.GCN2_Net(input_channels=8, output_channels=1, hidden_channels=8, num_layers=10, alpha=0.1,
                          theta=0.5, shared_weights=True, dropout=0.6)
 
         # Define counter, memory size and loss function
@@ -83,7 +83,7 @@ class DQAgent:
         # ------Define the loss function-----#
         self.criterion = torch.nn.MSELoss(reduction='sum')
 
-    def choose_action(self, state, w_weighted, edge_index, edge_weight, back_depot):
+    def choose_action(self, state, w_weighted, edge_index, back_depot):
         # Clone the dynamic variable so we don't mess up graph
         observation = state[0].int()
         loads = state[1]
@@ -107,7 +107,7 @@ class DQAgent:
         mask[cur_node] =  0 # mask out visited node
 
         # Time limit constraint: all vehicles must start at the depot and return to the depot within a limited time.
-        if back_depot and (last_node > 0) and (cur_node > 0):  # TODO: hardcore  return to depot after traveling 120 min at 30km/h
+        if back_depot and (last_node > 0) and (cur_node > 0):
             action = torch.tensor([0])
 
         elif self.epsilon_ > torch.rand(1):
@@ -117,7 +117,7 @@ class DQAgent:
                 action = torch.tensor([0])  # return to depot
 
         else:
-            q_a = self.policy_net(state.T, edge_index, edge_weight).detach().clone()
+            q_a = self.policy_net(state.T, edge_index).detach().clone()
             # q_a = self.policy_net(state.T.unsqueeze(0), edge_index.unsqueeze(0), edge_weight.unsqueeze(0)).detach().clone()
 
             action = torch.argmax(q_a[:,0] + (1 - mask) * self.neg_inf).reshape(1)
@@ -165,8 +165,8 @@ class DQAgent:
         q_target = torch.zeros(BATCH_SIZE)
 
         for i in range(BATCH_SIZE):
-            q_eval[i] = self.policy_net(batch.state[i].T, batch.edge_index[i], batch.edge_weight[i])[batch.action[i]]
-            q_next = self.target_net(batch.next_state[i].T, batch.edge_index[i], batch.edge_weight[i]).detach()  # detach from computational graph, don't back propagate
+            q_eval[i] = self.policy_net(batch.state[i].T, batch.edge_index[i])[batch.action[i]]
+            q_next = self.target_net(batch.next_state[i].T, batch.edge_index[i]).detach()  # detach from computational graph, don't back propagate
             q_target[i] = (batch.reward[i] + self.gamma * q_next.max()).float()
 
         loss = self.criterion(q_eval, q_target)

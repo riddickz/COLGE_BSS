@@ -129,7 +129,7 @@ class Graph:
 
         return nx.adjacency_matrix(self.g)
 
-    def get_state(self):
+    def get_edge(self):
         edge_index, edge_weight = from_scipy_sparse_matrix(self.A)
         edge_index = edge_index.long()
         edge_weight = edge_weight.float()

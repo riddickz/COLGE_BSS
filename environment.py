@@ -18,19 +18,26 @@ class Environment:
         self.graph = self.graph_dict[self.games]
         self.dynamic = self.graph.dynamic.detach().clone()
         self.dynamic_init = self.dynamic.detach().clone()
+        self.static = self.graph.static.detach()
+        self.state = self.compute_state()
         self.prev_node = 0
         self.t_total = 0.
         self.tour_indices = [0]
         self.prev_demand = np.abs(self.dynamic[2, 1:]).sum()
         self.trip_count = 0
-        self.edge_index,self.edge_weight= self.graph.get_state()
-        return self.dynamic, self.graph.W_weighted, self.edge_index,self.edge_weight
+        self.edge_index, _ = self.graph.get_edge()
+        return self.state, self.graph.W_weighted, self.edge_index
+
+    def compute_state(self):
+        state = torch.cat((self.dynamic,self.static.T),dim=0)
+        return state.float()
 
     def demand_reset(self):
         self.graph.refresh_demand()
         self.dynamic = self.graph.dynamic.detach().clone()
         self.dynamic_init = self.dynamic.detach().clone()
-        return self.dynamic
+        self.state = self.compute_state()
+        return self.state
 
     def step(self, action):
         chosen_idx = action.item()
@@ -80,7 +87,9 @@ class Environment:
 
         info = (self.prev_node, self.t_total, self.tour_indices, back_depot)
 
-        return (self.dynamic, reward, done, info)
+        self.state = self.compute_state()
+
+        return (self.state, reward, done, info)
 
     def get_reward(self, chosen_idx):
         done = False
@@ -102,13 +111,17 @@ class Environment:
 
         if timeout or full_visit or demand == 0: #or self.trip_count ==3:
             time_depot = self.graph.W_weighted[0, chosen_idx]  # travel back to depot
-            reward -= (time_depot + demand)  # t_ij * x_ijk + β(p_b+ + p_b−)
+            reward -= (time_depot + 3*demand)  # t_ij * x_ijk + β(p_b+ + p_b−)
             self.t_total += time_depot
             self.tour_indices.append(0)
             done = True
 
-            if timeout:
-                print("TIMEOUT!")
+            if demand == 0:
+                print("Zero Demands!")
+            elif timeout:
+                print("Time Out!")
+            elif full_visit:
+                print("Full Visit!")
 
             print("Tour: ", self.tour_indices)
             print("Tour Time Cost: ", self.t_total.item())

@@ -21,20 +21,20 @@ class Runner:
 
         for i_episode in range(100):  # TODO: change hardcode
             # play episodes of BSS game on same graph with different demand
-            s, w_weighted, edge_index, edge_weight = self.env.reset(g)
+            s, w_weighted, edge_index = self.env.reset(g)
 
             back_depot = False
             ep_r = 0
 
             for i in range(0, max_iter):
-                a = self.agent.choose_action(s, w_weighted, edge_index, edge_weight, back_depot)
+                a = self.agent.choose_action(s, w_weighted, edge_index, back_depot)
 
                 # obtain the reward and next state and some other information
                 s_, r, done, info = self.env.step(a)
                 back_depot = info[3]
 
                 # Store the transition in memory
-                self.agent.memory.push(s, a, r, s_, w_weighted, edge_index, edge_weight)
+                self.agent.memory.push(s, a, r, s_, w_weighted, edge_index)
                 self.agent.memory_counter += 1
 
                 ep_r += r.item()
