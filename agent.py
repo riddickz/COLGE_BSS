@@ -44,9 +44,9 @@ class DQAgent:
     def __init__(self, model, lr):
         self.model_name = model
         self.gamma = 0.99  # 0.99
-        self.epsilon_ = 0.8
-        self.epsilon_min = 0.02
-        self.discount_factor = 0.999
+        self.epsilon_ = 1.
+        self.epsilon_min = 0.05
+        self.discount_factor = 0.999990
         self.neg_inf = torch.tensor(-1000)
 
         self.target_net_replace_freq = 20  # How frequently target netowrk updates
@@ -143,7 +143,7 @@ class DQAgent:
         q_next = self.target_net(b_s_,b_adj).detach()  # detach from computational graph, don't back propagate
         # select the maximum q value
         # q_next.max(1) returns the max value along the axis=1 and its corresponding index
-        q_target = (b_r + self.gamma * q_next.max(1)[0].view(self.batch_size, 1)).float()  # (batch_size, 1)
+        q_target = (b_r.reshape(-1,1) + self.gamma * q_next.max(1)[0]).float()  # (batch_size, 1)
 
         # q_eval = torch.zeros(BATCH_SIZE)
         # q_target = torch.zeros(BATCH_SIZE)

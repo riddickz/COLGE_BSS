@@ -10,7 +10,8 @@ class BSSRPMIP(object):
 	def __init__(self, 
 		g:"Graph", 
 		use_penalties:bool, 
-		solver_time_limit:float=1e5, 
+		no_bikes_leaving:bool,
+		solver_time_limit:float=1e5,
 		tol:float=1e-5):
 
 		""" 
@@ -32,6 +33,7 @@ class BSSRPMIP(object):
 		"""
 		self.graph = g
 		self.use_penalties = use_penalties
+		self.no_bikes_leaving = no_bikes_leaving
 		self.solver_time_limit = solver_time_limit
 		self.tol = tol
 
@@ -41,6 +43,7 @@ class BSSRPMIP(object):
 		self.demands= self.graph.demands
 		self.num_vehicles = self.graph.num_vehicles
 		self.time_limit = self.graph.time_limit
+		self.bike_load_time = self.graph.bike_load_time
 
 		# penalty constraints
 		self.penalty_cost_demand = self.graph.penalty_cost_demand
@@ -63,6 +66,7 @@ class BSSRPMIP(object):
 		self.f_vars = None
 		self.t_vars = None
 		self.d_vars = None
+		self.gamma_vars = None
 		self.var_dict = None
 
 		self.routes = None
@@ -103,6 +107,7 @@ class BSSRPMIP(object):
 		if self.use_penalties:
 			self.t_vars = {}
 			self.d_vars = {}
+			self.gamma_vars = {}
 
 		# add transport variables to model [x_ijk]
 		for k in self.K:
@@ -149,6 +154,11 @@ class BSSRPMIP(object):
 					self.d_vars[d_pos_name] = self.model.addVar(obj=self.penalty_cost_demand, lb=0.0, vtype=gp.GRB.CONTINUOUS, name=d_pos_name)
 					self.d_vars[d_neg_name] = self.model.addVar(obj=self.penalty_cost_demand, lb=0.0, vtype=gp.GRB.CONTINUOUS, name=d_neg_name)
 		
+			for k in self.K:
+				for i in self.V:
+					gamma_name = f"gamma_{i}_{k}"
+					self.gamma_vars[gamma_name] = self.model.addVar(obj=0.0, lb=0.0, vtype=gp.GRB.CONTINUOUS, name=gamma_name)
+
 		self.var_dict = {
 			"x" : self.x_vars,
 			"y" : self.y_vars,
@@ -166,14 +176,16 @@ class BSSRPMIP(object):
 			eq_ = 0
 			for i in self.V_0:
 				eq_ += self.x_vars[f"x_{0}_{i}_{k}"]
-			self.model.addConstr(eq_ <= self.num_vehicles, name=f"2_depot_out_{k}")
+			#self.model.addConstr(eq_ <= self.num_vehicles, name=f"2_depot_out_{k}")
+			self.model.addConstr(eq_ <= 1, name=f"2_depot_out_{k}")
 			
 		# constraint (3)
 		for k in self.K:
 			eq_ = 0
 			for i in self.V_0:
 				eq_ += self.x_vars[f"x_{i}_{0}_{k}"]
-			self.model.addConstr(eq_ <= self.num_vehicles, name=f"3_depot_in_{k}")
+			#self.model.addConstr(eq_ <= self.num_vehicles, name=f"3_depot_in_{k}")
+			self.model.addConstr(eq_ <= 1, name=f"3_depot_in_{k}")
 
 		return
 
@@ -231,7 +243,7 @@ class BSSRPMIP(object):
 					
 		# constraint (9)
 		for k in self.K:
-			for i in self.V_0:
+			for i in self.V:
 				eq_ = 0
 				for j in self.V:
 					if i == j:
@@ -242,18 +254,57 @@ class BSSRPMIP(object):
 						continue
 					eq_ -= self.z_vars[f"z_{h}_{i}_{k}"]
 
-				if self.use_penalties:
-					eq_ += self.d_vars[f"d_pos_{i}_{k}"]
-					eq_ -= self.d_vars[f"d_neg_{i}_{k}"]
+				if i != 0:
+					if self.use_penalties:
+						eq_ += self.d_vars[f"d_pos_{i}_{k}"]
+						eq_ -= self.d_vars[f"d_neg_{i}_{k}"]
 
-				eq_ -= self.demands[i] * self.y_vars[f"y_{i}_{k}"]
+						eq_ -= self.demands[i] * self.y_vars[f"y_{i}_{k}"]
+
 				self.model.addConstr(eq_ == 0, name=f"9_bike_loading_{i}_{k}")
+
+		# constraint for no bikes leaving
+		if self.no_bikes_leaving:
+			for k in self.K:
+				for j in self.V_0:
+					self.model.addConstr(self.z_vars[f"z_{0}_{j}_{k}"] == 0, name=f"9_no_leaving_{0}_{j}_{k}")
 
 		return
 
 
 	def add_time_constraints(self):
 		""" Adds time constraints to gurobi model. """
+
+		if self.use_penalties:
+
+			# constraint (10)
+			for k in self.K:
+				for i in self.V:
+					eq_ = self.gamma_vars[f"gamma_{i}_{k}"]
+					for j in self.V:
+						if i == j:
+							continue
+						eq_ += self.z_vars[f"z_{i}_{j}_{k}"]
+					for h in self.V:
+						if i == h:
+							continue
+						eq_ -= self.z_vars[f"z_{h}_{i}_{k}"]
+					self.model.addConstr(eq_ >= 0, name=f"10_gamma_pos_{i}_{k}")
+
+			# constraint (10)
+			for k in self.K:
+				for i in self.V_0:
+					eq_ = self.gamma_vars[f"gamma_{i}_{k}"]
+					for j in self.V:
+						if i == j:
+							continue
+						eq_ -= self.z_vars[f"z_{i}_{j}_{k}"]
+					for h in self.V:
+						if i == h:
+							continue
+						eq_ += self.z_vars[f"z_{h}_{i}_{k}"]
+					self.model.addConstr(eq_ >= 0, name=f"10_gamma_neg_{i}_{k}")
+
 
 		# constraint (10)
 		for k in self.K:
@@ -264,7 +315,10 @@ class BSSRPMIP(object):
 						continue
 					eq_ += self.cost_matrix[i,j] * self.x_vars[f"x_{i}_{j}_{k}"]
 			for i in self.V_0:
-				eq_ += self.tau * np.abs(self.demands[i]) * self.y_vars[f"y_{i}_{k}"]
+				if self.use_penalties:
+					eq_ += self.tau * self.gamma_vars[f"gamma_{i}_{k}"]
+				else:
+					eq_ +=  np.abs(self.demands[i]) * self.y_vars[f"y_{i}_{k}"]
 			if self.use_penalties:
 				eq_ -=  self.t_vars[f"t_{k}"]
 				
