@@ -31,14 +31,14 @@ parser.add_argument('--coeff_demand',type=float, default=1.,help="obj coeff, pen
 parser.add_argument('--coeff_time',type=float, default=1.,help="obj coeff, penalty_cost_time")
 parser.add_argument('--car_speed',type=float, default=30.)
 parser.add_argument('--car_time_limit',type=float, default=60.)
-parser.add_argument('--n_car', type=int, action='car_nums', default=3, help='number of vehicles used in game')
+parser.add_argument('--n_car', type=int, metavar='car_nums', default=3, help='number of vehicles used in game')
 parser.add_argument('--verbose', action='store_true', default=True, help='Display cumulative results at each step')
 
 
 
 def main():
     args = parser.parse_args()
-    logging.info('Loading graph: nodes{}, ngames {}, graph_nbr {} '.format(args.node, args.ngames, args.graph_nbr))
+    logging.info('Loading graph: nodes{}, ngames {}, graph_nbr {}, knn {} '.format(args.n_node, args.ngames, args.graph_nbr, args.knn))
     graph_dic = {}
 
     for graph_ in range(args.graph_nbr):

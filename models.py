@@ -3,11 +3,12 @@ import torch.nn.functional as F
 import torch.nn as nn
 from labml_helpers.module import Module
 import torch_geometric as tg
-from torch_geometric.nn import GCN2Conv,GCNConv
+from torch_geometric.nn import GCN2Conv, GCNConv
 from torch.nn import Linear
 
+
 class GCN_PYG(torch.nn.Module):
-    def __init__(self, input_dim, feature_dim, hidden_dim, output_dim,edge_weight,
+    def __init__(self, input_dim, feature_dim, hidden_dim, output_dim, edge_weight,
                  feature_pre=True, layer_num=2, dropout=True, **kwargs):
         super(GCN_PYG, self).__init__()
         self.feature_pre = feature_pre
@@ -29,7 +30,7 @@ class GCN_PYG(torch.nn.Module):
         x = F.relu(x)
         if self.dropout:
             x = F.dropout(x, training=self.training)
-        for i in range(self.layer_num-2):
+        for i in range(self.layer_num - 2):
             x = self.conv_hidden[i](x, edge_index)
             x = F.relu(x)
             if self.dropout:
@@ -37,6 +38,7 @@ class GCN_PYG(torch.nn.Module):
         x = self.conv_out(x, edge_index)
         x = F.normalize(x, p=2, dim=-1)
         return x
+
 
 class GCN2_Net(torch.nn.Module):
     def __init__(self, input_channels, output_channels, hidden_channels, num_layers, alpha, theta,
@@ -51,10 +53,9 @@ class GCN2_Net(torch.nn.Module):
         for layer in range(num_layers):
             self.convs.append(
                 GCN2Conv(hidden_channels, alpha, theta, layer + 1,
-                         shared_weights,normalize=True))
+                         shared_weights, normalize=True))
 
         self.dropout = dropout
-
 
     def forward(self, x, edge_index):
         x = F.dropout(x, self.dropout, training=self.training)
@@ -74,14 +75,14 @@ class GCN2_Net(torch.nn.Module):
 def normalize(A):
     A = A + torch.eye(A.size(1))
     d = torch.sum(A, dim=2)
-    #D = D^-1/2
-    D = torch.diag_embed(torch.pow(d , -0.5))
+    # D = D^-1/2
+    D = torch.diag_embed(torch.pow(d, -0.5))
     return D.bmm(A).bmm(D)
 
 
 class GCN_Naive(nn.Module):
     def __init__(self, c_in, c_out, c_hidden):
-        super(GCN_Naive,self).__init__()
+        super(GCN_Naive, self).__init__()
         self.fc1 = nn.Linear(c_in, c_hidden, bias=False)
         self.fc2 = nn.Linear(c_hidden, c_hidden, bias=False)
         self.fc3 = nn.Linear(c_hidden, c_out, bias=False)
@@ -95,6 +96,7 @@ class GCN_Naive(nn.Module):
         H = H / num_neighbours
         H = self.fc3(A.bmm(H))
         return H
+
 
 class GATv2(Module):
     """
@@ -137,6 +139,7 @@ class GATv2(Module):
         x = self.output(x, adj_mat)
         # x = self.activation(x)
         return x
+
 
 class GraphAttentionV2Layer(Module):
 
@@ -207,7 +210,7 @@ class GraphAttentionV2Layer(Module):
         e_flat = torch.flatten(e, start_dim=1)
         adj_mat_flat = torch.flatten(adj_mat, start_dim=1)
         e_flat = e_flat.masked_fill(adj_mat_flat == 0, float('-inf'))
-        e = e_flat.unflatten(1,(n_nodes,n_nodes)).unsqueeze(3)
+        e = e_flat.unflatten(1, (n_nodes, n_nodes)).unsqueeze(3)
 
         # We then normalize attention scores (or coefficients)
         a = self.softmax(e)
@@ -220,28 +223,31 @@ class GraphAttentionV2Layer(Module):
 
         if self.is_concat:
             # Concatenate the heads
-            return attn_res.reshape(batch_size,n_nodes, self.n_heads * self.n_hidden)
+            return attn_res.reshape(batch_size, n_nodes, self.n_heads * self.n_hidden)
         else:
             # Take the mean of the heads
             return attn_res.mean(dim=2)
 
+
 def test_GATv2():
-    model = GATv2(in_features=8, n_hidden=8, n_classes=1, n_heads=1, dropout=0.1, share_weights = False)
-    x = torch.rand(10,20,8)
-    a = torch.randint(2,(20,20))
-    a = (a + a.t()).clamp(max = 1)
+    model = GATv2(in_features=8, n_hidden=8, n_classes=1, n_heads=1, dropout=0.1, share_weights=False)
+    x = torch.rand(10, 20, 8)
+    a = torch.randint(2, (20, 20))
+    a = (a + a.t()).clamp(max=1)
     a = a.unsqueeze(0).repeat(10, 1, 1)
-    out = model(x,a)
+    out = model(x, a)
     print(out.shape)
+
 
 def test_GCN_naive():
     model = GCN_Naive(c_in=8, c_out=1, c_hidden=8)
-    x = torch.rand(10,20,8)
-    a = torch.randint(2,(20,20))
-    a = (a + a.t()).clamp(max = 1)
+    x = torch.rand(10, 20, 8)
+    a = torch.randint(2, (20, 20))
+    a = (a + a.t()).clamp(max=1)
     a = a.unsqueeze(0).repeat(10, 1, 1)
-    out = model(x,a)
+    out = model(x, a)
     print(out.shape)
+
 
 if __name__ == "__main__":
     test_GCN_naive()
