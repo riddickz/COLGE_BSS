@@ -104,6 +104,7 @@ class Graph:
         self.gen_instance()
         self.W, self.W_val = self.adjacenct_gen(self.num_nodes, self.num_neighbors, self.static)
         self.W_weighted = torch.tensor(np.multiply(self.W_val, self.W))
+        self.W = torch.tensor(self.W)
         self.A = sparse.csr_matrix(self.W_weighted)
         self.g = nx.from_numpy_matrix(np.matrix(self.W), create_using=nx.Graph)
         self.g_weighted = nx.from_numpy_matrix(np.matrix(self.W_weighted), create_using=nx.Graph)
@@ -189,7 +190,7 @@ def test():
         speed=30,
         time_limit=120)
     nx.draw(g.g, with_labels=True)
-    edge_index, edge_weight = g.get_state()
+    edge_index, edge_weight = g.get_edge()
     print(edge_index)
 
 

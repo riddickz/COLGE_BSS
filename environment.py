@@ -26,7 +26,7 @@ class Environment:
         self.prev_demand = np.abs(self.dynamic[2, 1:]).sum()
         self.trip_count = 0
         self.edge_index, _ = self.graph.get_edge()
-        return self.state, self.graph.W_weighted, self.edge_index
+        return self.state, self.graph.W
 
     def compute_state(self):
         state = torch.cat((self.dynamic,self.static.T),dim=0)
