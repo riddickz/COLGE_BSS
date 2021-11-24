@@ -116,29 +116,39 @@ class GATv2(Module):
         super().__init__()
 
         # First graph attention layer where we concatenate the heads
-        self.layer1 = GraphAttentionV2Layer(in_features, n_hidden, n_heads,
-                                            is_concat=True, dropout=dropout, share_weights=share_weights)
-        # Activation function after first graph attention layer
-        self.activation = nn.ELU()
+        self.gat_layer1 = GraphAttentionV2Layer(in_features, n_hidden, n_heads,
+                                                is_concat=True, dropout=dropout, share_weights=share_weights)
+
+        self.gat_layer = GraphAttentionV2Layer(n_hidden, n_hidden, n_heads,
+                                                is_concat=True, dropout=dropout, share_weights=share_weights)
+
+
+
         # Final graph attention layer where we average the heads
-        self.output = GraphAttentionV2Layer(n_hidden, n_classes, 1,
-                                            is_concat=False, dropout=dropout, share_weights=share_weights)
-        # Dropout
+        self.gat_output = GraphAttentionV2Layer(n_hidden, n_classes, 1,
+                                                is_concat=False, dropout=dropout, share_weights=share_weights)
+
+        self.linear = nn.Linear(n_hidden*2, 1, bias=False)
+        self.activation = nn.ELU()
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor, adj_mat: torch.Tensor):
-        # Apply dropout to the input
-        x = self.dropout(x)
-        # First graph attention layer
-        x = self.layer1(x, adj_mat)
-        # Activation function
+        # 1. Obtain node embeddings
+        x = self.gat_layer1(x, adj_mat)
         x = self.activation(x)
-        # Dropout
-        x = self.dropout(x)
-        # Output layer
-        x = self.output(x, adj_mat)
-        # x = self.activation(x)
-        return x
+        # x = self.dropout(x)
+
+        x = self.gat_layer(x, adj_mat)
+        x_node = self.activation(x)
+        # x = self.dropout(x)
+
+        # 2. Readout layer
+        x_graph = torch.mean(x_node, 1).unsqueeze(1).repeat(1,x_node.size(1),1) # global mean pool # TODO check graph embed
+
+        # 3. Apply final projection
+        out = torch.cat((x_node, x_graph),dim=2)
+        out = self.linear(out)
+        return out
 
 
 class GraphAttentionV2Layer(Module):
