@@ -35,6 +35,7 @@ class Graph:
         self.num_neighbors = k_nn
         self.max_load = max_load
         self.max_demand = max_demand
+        self.bike_load_time = bike_load_time
         self.area = area  # km
         self.num_vehicles = num_vehicles
         self.penalty_cost_demand = penalty_cost_demand
