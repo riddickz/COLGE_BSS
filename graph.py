@@ -23,6 +23,7 @@ class Graph:
                  penalty_cost_time,
                  speed,
                  time_limit,
+                 bike_load_time=2,
                  max_load=20,
                  max_demand=9,
                  area=10):

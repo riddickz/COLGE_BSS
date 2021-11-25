@@ -27,10 +27,10 @@ parser.add_argument('--bs',type=int,default=32,help="minibatch size for training
 parser.add_argument('--n_step',type=int, default=3,help="n step in RL")
 parser.add_argument('--n_node', type=int, metavar='node_numbers',default=20, help="number of node in generated graphs")
 parser.add_argument('--knn', type=int, metavar='k_neighbor_node',default=10, help="number of node's KNN in generated graphs")
-parser.add_argument('--coeff_demand',type=float, default=1.,help="obj coeff, penalty_cost_demand")
-parser.add_argument('--coeff_time',type=float, default=1.,help="obj coeff, penalty_cost_time")
+parser.add_argument('--coeff_demand',type=float, default=2.,help="obj coeff, penalty_cost_demand")
+parser.add_argument('--coeff_time',type=float, default=5.,help="obj coeff, penalty_cost_time")
 parser.add_argument('--car_speed',type=float, default=30.)
-parser.add_argument('--car_time_limit',type=float, default=60.)
+parser.add_argument('--time_limit',type=float, default=60.)
 parser.add_argument('--n_car', type=int, metavar='car_nums', default=3, help='number of vehicles used in game')
 parser.add_argument('--verbose', action='store_true', default=True, help='Display cumulative results at each step')
 
@@ -50,7 +50,7 @@ def main():
                                         penalty_cost_demand=args.coeff_demand,
                                         penalty_cost_time=args.coeff_time,
                                         speed=args.car_speed,
-                                        time_limit=args.car_time_limit)
+                                        time_limit=args.time_limit)
 
     logging.info('Loading agent...')
     agent_class = agent.Agent(args.model, args.lr)
