@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import agent
-from utils.vis import plot_reward
-
+from utils.vis import plot_reward, plot_loss
+import pickle
 
 class Runner:
     def __init__(self, environment, agent, verbose=False, render=False):
@@ -15,6 +15,7 @@ class Runner:
         self.agent = agent
         self.verbose = verbose
         self.render_on = render
+        self.plot_on = False
 
     def train(self, g, max_episode, max_iter):
         reward_list = []
@@ -25,8 +26,8 @@ class Runner:
             s, adj_mat = self.env.reset(g)
             back_depot = False
             ep_r = 0
-            avg_loss = 0
-            avg_eps = 0
+            ep_loss = []
+            ep_eps = []
 
 
             for i in range(0, max_iter):
@@ -45,8 +46,8 @@ class Runner:
                 # if the experience replay buffer is filled, DQN begins to learn or update its parameters
                 if self.agent.memory_counter > self.agent.mem_capacity:
                     loss, epsilon =self.agent.learn()
-                    avg_loss += loss.item()
-                    avg_eps += epsilon
+                    ep_loss.append(loss.item())
+                    ep_eps.append(epsilon)
 
                     if done:
                         print('Ep: ', i_episode, ' |', 'Ep_r: ', round(ep_r, 2))
@@ -59,12 +60,14 @@ class Runner:
                 # use next state to update the current state.
                 s = s_
 
-            loss_list.append(avg_eps/max_iter)
-            epsilon_list.append(avg_eps/max_iter)
             reward_list.append(ep_r)
+            if len(ep_loss) != 0:
+                loss_list.append(np.mean(ep_loss))
+                epsilon_list.append(np.mean(ep_eps))
 
             if self.render_on:
                 self.env.render()
+                print("")
 
         return reward_list, loss_list, epsilon_list
 
@@ -84,9 +87,16 @@ class Runner:
                 cumul_reward_list.extend(reward_list)
                 cumul_loss_list.extend(loss_list)
                 cumul_epsilon_list.extend(epsilon_list)
+                if self.plot_on:
+                    plot_reward(cumul_reward_list)
+                    plot_loss(cumul_loss_list)
 
                 if self.verbose:
                     print(" <=> Finished game number: {} <=>\n".format(g))
+
+        with open('train_results.pickle', 'wb') as handle:
+            pickle.dump([cumul_reward_list, cumul_loss_list, cumul_epsilon_list], handle)
+
         return cumul_reward_list, cumul_loss_list, cumul_epsilon_list
 
     def validate(self, g, max_iter):
@@ -119,4 +129,8 @@ class Runner:
             print(" -> games : " + str(g))
             ep_r = self.validate(g, max_iter)
             reward_list.append(ep_r)
+
+            with open('val_result.pickle', 'wb') as handle:
+                pickle.dump(reward_list, handle)
+
         return reward_list

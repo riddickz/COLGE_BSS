@@ -140,18 +140,20 @@ class GATv2(Module):
         x = self.activation(x)
         # x = self.dropout(x)
 
-        x = self.gat_layer(x, adj_mat)
-        x_node = self.activation(x)
-        # x = self.dropout(x)
+        out = self.gat_output(x, adj_mat)
+        # x = self.gat_layer(x, adj_mat)
 
-        # 2. Readout layer
-        x_graph = torch.mean(x_node, 1).unsqueeze(1).repeat(1,x_node.size(1),1) # global mean pool # TODO check graph embed
-
-        # 3. Apply final projection
-        out = torch.cat((x_node, x_graph),dim=2)
-        out = self.linear1(out)
-        out = self.activation(out)
-        out = self.linear2(out)
+        # x_node = self.activation(x)
+        # # x = self.dropout(x)
+        #
+        # # 2. Readout layer
+        # x_graph = torch.mean(x_node, 1).unsqueeze(1).repeat(1,x_node.size(1),1) # global mean pool # TODO check graph embed
+        #
+        # # 3. Apply final projection
+        # out = torch.cat((x_node, x_graph),dim=2)
+        # out = self.linear1(out)
+        # out = self.activation(out)
+        # out = self.linear2(out)
         return out
 
 

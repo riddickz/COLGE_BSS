@@ -43,14 +43,14 @@ class DQAgent:
 
     def __init__(self, model, lr):
         self.model_name = model
-        self.gamma = 0.99  # 0.99
+        self.gamma = .99  # 0.99
         self.epsilon_ = 1.
         self.epsilon_min = 0.05
         self.discount_factor = 0.999990
-        self.neg_inf = torch.tensor(float('-inf'))
+        self.neg_inf = torch.tensor([-1000])
 
-        self.target_net_replace_freq = 20  # How frequently target netowrk updates
-        self.mem_capacity = 4000 # capacity of experience replay buffer
+        self.target_net_replace_freq = 10  # How frequently target netowrk updates
+        self.mem_capacity = 10000 # capacity of experience replay buffer
         self.batch_size = 64  # batch size of sampling process from buffer
 
         # if self.model_name == 'GCN_QN_1':
@@ -114,8 +114,8 @@ class DQAgent:
             q_a = self.policy_net(state.T.unsqueeze(0), adj.unsqueeze(0)).detach().clone()
             # q_a = self.policy_net(state.T, edge_index).detach().clone()
 
-            if not (mask == 1).any():
-                mask = mask2
+            # if not (mask == 1).any():
+            mask = mask2
             action = torch.argmax(q_a[0,:,0] + (1 - mask) * self.neg_inf).reshape(1)
 
         return action

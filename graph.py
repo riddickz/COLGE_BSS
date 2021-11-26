@@ -94,7 +94,7 @@ class Graph:
             W = W.T
             W[idx][knns[idx]] = 1
 
-        np.fill_diagonal(W, 0)
+        # np.fill_diagonal(W, 0)
 
         W_val *= W
         return W.astype(int), W_val

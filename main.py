@@ -21,21 +21,20 @@ parser.add_argument('--agent', metavar='AGENT_CLASS', default='Agent', type=str,
 parser.add_argument('--graph_nbr', type=int, default='1000', help='number of differente graph to generate for the training sample')
 parser.add_argument('--model', type=str, default='GATv2', help='model name')
 parser.add_argument('--ngames', type=int, metavar='n', default='500', help='number of games to simulate')
-parser.add_argument('--nepisode', type=int, metavar='n', default='50', help='max number of episodes per game')
+parser.add_argument('--nepisode', type=int, metavar='n', default=25, help='max number of episodes per game')
 parser.add_argument('--niter', type=int, metavar='n', default='1000', help='max number of iterations per episode')
-parser.add_argument('--epoch', type=int, metavar='nepoch',default=25, help="number of epochs")
-parser.add_argument('--lr',type=float, default=5e-4,help="learning rate")
+parser.add_argument('--epoch', type=int, metavar='nepoch',default=3, help="number of epochs")
+parser.add_argument('--lr',type=float, default=1e-3,help="learning rate")
 parser.add_argument('--bs',type=int,default=32,help="minibatch size for training")
-parser.add_argument('--n_step',type=int, default=3,help="n step in RL")
 parser.add_argument('--n_node', type=int, metavar='node_numbers',default=20, help="number of node in generated graphs")
 parser.add_argument('--knn', type=int, metavar='k_neighbor_node',default=10, help="number of node's KNN in generated graphs")
-parser.add_argument('--coeff_demand',type=float, default=2.,help="obj coeff, penalty_cost_demand")
+parser.add_argument('--coeff_demand',type=float, default=5.,help="obj coeff, penalty_cost_demand")
 parser.add_argument('--coeff_time',type=float, default=5.,help="obj coeff, penalty_cost_time")
 parser.add_argument('--car_speed',type=float, default=30.)
 parser.add_argument('--time_limit',type=float, default=60.)
 parser.add_argument('--n_car', type=int, metavar='car_nums', default=3, help='number of vehicles used in game')
 parser.add_argument('--verbose', action='store_true', default=True, help='Display cumulative results at each step')
-parser.add_argument('--val', metavar='validation_mode', default=False)
+parser.add_argument('--val', metavar='validation_mode', default=True)
 
 
 
@@ -84,7 +83,7 @@ def main():
             # Load Validation Dataset
             with open('graph_dic_val.pickle', 'rb') as handle:
                 graph_dic_val = pickle.load(handle)
-                ngames = len(graph_dic_val)
+            ngames = len(graph_dic_val)
         else:
             # Create New Validation Dataset
             graph_dic_val = {}

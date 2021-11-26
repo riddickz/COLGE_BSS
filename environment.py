@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
-
 """
 This file contains the definition of the environment
 in which the agents are run.
@@ -63,7 +62,7 @@ class Environment:
         # returning to depot
         #elif (self.dynamic[5].sum() >= self.graph.time_limit) or chosen_idx == 0:
         if chosen_idx == 0:
-            self.dynamic[5, :] = 0
+            self.dynamic[5, :] = 0 # trip time
             back_depot = True
 
         # continuing on route
@@ -80,21 +79,23 @@ class Environment:
 
         info = (self.prev_node, self.t_total, self.tour_indices, back_depot)
 
-        # terminal case
-        if (self.dynamic[0] != 0).all():
+        demand_met = bool((self.dynamic[0] != 0).all())
+        all_car_used =  bool(self.trip_count == self.graph.num_vehicles)
 
+        # terminal case
+        if demand_met or all_car_used:
             reward += self.get_terminal_reward(chosen_idx, new_load)
 
             self.t_total += self.get_travel_dist(chosen_idx, 0)
             self.tour_indices.append(0)
             done = True
 
+            print("#" * 100)
             print("Tour: ", self.tour_indices)
             print("Tour Time: ", self.t_total.item())
-            print("Left Demand: ", new_demand)
+            print("Left Demand: ", np.abs(self.dynamic[2]).sum())
             print("Node Visits: ", len(self.tour_indices))
             print("Games Finished: ", self.games)
-            print("#" * 100)
 
         self.state = self.compute_state()
         return (self.state, reward, done, info)
@@ -106,15 +107,16 @@ class Environment:
         reward += self.get_travel_dist(chosen_idx, 0) # time to go back to depot
         reward += excess * self.graph.penalty_cost_demand # additional bikes on vehicle
         reward += self.get_overage_last_step(chosen_idx)  * self.graph.penalty_cost_time # overtime
-        return - reward
+        # reward += self._get_demand() * self.graph.penalty_cost_demand # difference in unmet demand
+        return torch.tensor([-reward])
 
     def get_reward(self, chosen_idx):
         """ Gets the reward action.  """
-        reward = 0
-        reward += self.get_travel_dist(self.prev_node, chosen_idx) # travel time from prev node to next node
-        reward += self.get_demand_reward(chosen_idx) * self.graph.penalty_cost_demand # difference in unmet demand
-        reward += self.get_overage_time(chosen_idx) * self.graph.penalty_cost_time # overtime
-        return - reward
+        travel_dist = self.get_travel_dist(self.prev_node, chosen_idx) # travel time from prev node to next node
+        demand_reward = self.get_demand_reward(chosen_idx) * self.graph.penalty_cost_demand # difference in unmet demand
+        overage_time = self.get_overage_time(chosen_idx) * self.graph.penalty_cost_time # overtime
+        reward = travel_dist + overage_time + demand_reward
+        return torch.tensor([-reward])
 
     def get_overage_last_step(self, chosen_idx):
         """ Gets the overage time for moving to the depot in the last step.  """
@@ -169,6 +171,9 @@ class Environment:
         new_demand = demand_idx - load_diff
 
         return new_load, new_demand
+
+    def _get_demand(self):
+        return np.abs(self.dynamic[2]).sum()
 
 
     #     chosen_idx = action.item()
@@ -290,23 +295,38 @@ class Environment:
         for edge in edgeSet:
             X = nodes[edge, 0]
             Y = nodes[edge, 1]
-            plt.plot(X, Y, "g-", lw=2, alpha=0.1)
+            plt.plot(X, Y, "b-", lw=2, alpha=0.05)
 
         # Plot tours
+        cars = self.tour_indices.count(0)
+        cmap = plt.get_cmap('gist_ncar')
+        colors_tour = [cmap(i) for i in np.linspace(0, 1, cars+1)]
+        c = 0
         for i, idx in enumerate(self.tour_indices):
+            if idx == 0:
+                c+=1
+
             if i < len(self.tour_indices) - 1:
                 next_node = self.tour_indices[i + 1]
                 X = [nodes[idx][0], nodes[next_node][0]]
                 Y = [nodes[idx][1], nodes[next_node][1]]
+                dx = nodes[next_node][0] - nodes[idx][0]
+                dy = nodes[next_node][1] - nodes[idx][1]
+
             else:
                 X = [nodes[idx][0], nodes[0][0]]
                 Y = [nodes[idx][1], nodes[0][1]]
+                dx = nodes[0][0] - nodes[idx][0]
+                dy = nodes[0][1] - nodes[idx][1]
 
-            plt.plot(X, Y, "black", lw=0.3)
+            plt.arrow(x=nodes[idx][0], y=nodes[idx][1], dx=dx, dy=dy, width=0.0005, length_includes_head=True,
+                      head_width=0.1, color=colors_tour[c])
+
+            # plt.plot(X, Y, lw=1, color=colors_tour[c])
 
         # Show dynamic
         for i, (x, y) in enumerate(zip(xs, ys)):
-            label = "N{}: {}/{}".format(i, self.dynamic[2][i].int(), self.dynamic_init[2][i].int())
+            label = "#{}: {} ->{}".format(i,self.dynamic_init[2][i].int(),self.dynamic[2][i].int())
             plt.annotate(label,  # this is the text
                          (x, y),  # these are the coordinates to position the label
                          textcoords="offset points",  # how to position the text
