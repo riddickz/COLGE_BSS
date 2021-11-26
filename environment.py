@@ -270,7 +270,7 @@ class Environment:
         plt.figure(0, figsize=(7, 7))
 
         nodes = self.graph.static.numpy()
-        W = self.graph.W
+        W = self.graph.W.detach().numpy()
 
         # Plot nodes
         colors = ['red']  # First node as depot

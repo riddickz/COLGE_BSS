@@ -14,3 +14,8 @@
 .ipynb_checkpoints/
 __pycache__/
  *.lp
+/scractch2
+/scratch3.py
+/scratch4.py
+/scratch5.py
+/model_scratch.py

@@ -47,7 +47,7 @@ class DQAgent:
         self.epsilon_ = 1.
         self.epsilon_min = 0.05
         self.discount_factor = 0.999990
-        self.neg_inf = torch.tensor(-1000)
+        self.neg_inf = torch.tensor(float('-inf'))
 
         self.target_net_replace_freq = 20  # How frequently target netowrk updates
         self.mem_capacity = 4000 # capacity of experience replay buffer
@@ -80,34 +80,43 @@ class DQAgent:
 
     def choose_action(self, state, adj, back_depot):
         # Clone the dynamic variable so we don't mess up graph
-        observation = state[0].int()
+        visited_nodes = state[0].int()
         loads = state[1]
         demands = state[2]
         cur_node = (state[3] == 1).nonzero().item()
         last_node = (state[4] == 1).nonzero().item()
 
         nbr_nodes = (adj[cur_node] > 0).int()
-        uncovered_nodes = (observation[:] == 0).int()
+        uncovered_nodes = (visited_nodes[:] == 0).int()
+
         mask = nbr_nodes * uncovered_nodes
         mask[0] = 1  # depot is always available unless last visit
         mask[last_node] = 0
         mask[cur_node] =  0 # mask out visited node
+
+        mask2 = uncovered_nodes # mask2 without neighbor node restriction
+        mask2[0] = 1  # depot is always available unless last visit
+        mask2[last_node] = 0
+        mask2[cur_node] =  0 # mask out visited node
 
         # Time limit constraint: all vehicles must start at the depot and return to the depot within a limited time.
         if back_depot and (last_node > 0) and (cur_node > 0):
             action = torch.tensor([0])
 
         elif self.epsilon_ > torch.rand(1):
-            if (nbr_nodes * mask == 1).any():  # if there is node neighbor to go
-                action = torch.tensor([np.random.choice(np.where(nbr_nodes * mask == 1)[0])])
+            if (mask == 1).any():  # if there is node neighbor to go
+                action = torch.tensor([np.random.choice(np.where(mask == 1)[0])])
             else:
-                action = torch.tensor([0])  # return to depot
+                action = torch.tensor([np.random.choice(np.where(mask2==1)[0])]) # randomly choose any unvisited node + depot
+                # action = torch.tensor([0])  # return to depot
 
         else:
             q_a = self.policy_net(state.T.unsqueeze(0), adj.unsqueeze(0)).detach().clone()
             # q_a = self.policy_net(state.T, edge_index).detach().clone()
 
-            action = torch.argmax(q_a[:,0] + (1 - mask) * self.neg_inf).reshape(1)
+            if not (mask == 1).any():
+                mask = mask2
+            action = torch.argmax(q_a[0,:,0] + (1 - mask) * self.neg_inf).reshape(1)
 
         return action
 
@@ -161,9 +170,14 @@ class DQAgent:
         if self.epsilon_ > self.epsilon_min:
             self.epsilon_ *= self.discount_factor
 
+        return loss, self.epsilon_
+
     def save_model(self):
         cwd = os.getcwd()
         torch.save(self.policy_net.state_dict(), cwd + '/model.pt')
+
+    def load_model(self, model_path):
+        self.policy_net.load_state_dict(torch.load(model_path))
 
 
 Agent = DQAgent

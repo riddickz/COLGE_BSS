@@ -128,7 +128,9 @@ class GATv2(Module):
         self.gat_output = GraphAttentionV2Layer(n_hidden, n_classes, 1,
                                                 is_concat=False, dropout=dropout, share_weights=share_weights)
 
-        self.linear = nn.Linear(n_hidden*2, 1, bias=False)
+        self.linear1 = nn.Linear(n_hidden*2, n_hidden, bias=True)
+        self.linear2 = nn.Linear(n_hidden, 1, bias=True)
+
         self.activation = nn.ELU()
         self.dropout = nn.Dropout(dropout)
 
@@ -147,7 +149,9 @@ class GATv2(Module):
 
         # 3. Apply final projection
         out = torch.cat((x_node, x_graph),dim=2)
-        out = self.linear(out)
+        out = self.linear1(out)
+        out = self.activation(out)
+        out = self.linear2(out)
         return out
 
 
