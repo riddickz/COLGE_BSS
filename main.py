@@ -9,6 +9,17 @@ import sys
 import pickle
 import os
 
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 # Set up logger
 logging.basicConfig(
     format='%(asctime)s:%(levelname)s:%(message)s',
@@ -41,7 +52,7 @@ parser.add_argument('--val', metavar='validation_mode', default=True)
 def main():
     args = parser.parse_args()
     logging.info('Loading graph: nodes{}, ngames {}, graph_nbr {}, knn {} '.format(args.n_node, args.ngames, args.graph_nbr, args.knn))
-    val_mode = args.val
+    val_mode = str2bool(args.val)
 
     if not val_mode:
         graph_dic_train = {}
