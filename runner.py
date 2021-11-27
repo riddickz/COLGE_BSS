@@ -18,6 +18,7 @@ class Runner:
         self.plot_on = False
 
     def train(self, g, max_episode, max_iter):
+        print("TRAINING")
         reward_list = []
         loss_list = []
         epsilon_list = []
@@ -43,12 +44,16 @@ class Runner:
 
                 # if the experience replay buffer is filled, DQN begins to learn or update its parameters
                 if self.agent.memory_counter > self.agent.mem_capacity:
+                    print("LEARNING")
                     loss, epsilon =self.agent.learn()
                     ep_loss.append(loss.item())
                     ep_eps.append(epsilon)
 
                     if done:
                         print('Ep: ', i_episode, ' |', 'Ep_r: ', round(ep_r, 2))
+
+                else:
+                    print("NOTLEARNING")
 
                 if done:
                     # if game is over, then skip the while loop.
@@ -98,25 +103,33 @@ class Runner:
 
         return cumul_reward_list, cumul_loss_list, cumul_epsilon_list
 
-    def validate(self, g, max_iter):
+    def validate(self, g, max_iter, verbose=True, return_route=False):
         s, adj_mat,mask = self.env.reset(g)
         ep_r = 0
+        route = [0]
 
         for i in range(0, max_iter):
             a = self.agent.choose_action(s, adj_mat, mask)
+            route.append(a.item())
             s_, r, done, info = self.env.step(a)
 
             ep_r += r.item()
 
             if done:
-                print(" ->    Terminal event: episodic rewards = {}".format(ep_r))
+                if verbose:
+                    print(" ->    Terminal event: episodic rewards = {}".format(ep_r))
                 break
 
             s = s_
             mask = info[3]
 
+        route.append(0)
+
         if self.render_on:
             self.env.render()
+
+        if return_route:
+            return ep_r, route
 
         return ep_r
 
