@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from prettytable import PrettyTable
+from datetime import datetime
 
 def visualize_2D(nodes, W, nodes_weight=None): # Plot tour
     plt.figure(figsize=(20,15))
@@ -35,7 +37,7 @@ def visualize_2D(nodes, W, nodes_weight=None): # Plot tour
 def plot_reward(reward_list):
     plt.ion()
     plt.figure(1)
-    window = 5 #int(max_episodes/20)
+    window = int(len(reward_list)/20)
     fig, ((ax1), (ax2)) = plt.subplots(2, 1, sharey=True, figsize=[9,9])
     rolling_mean = pd.Series(reward_list).rolling(window).mean()
 
@@ -62,23 +64,23 @@ def plot_reward(reward_list):
 
 
 
-def plot_loss(reward_list):
+def plot_loss(loss_list):
     plt.ion()
     plt.figure(1)
-    window = 5 #int(max_episodes/20)
+    window = int(len(loss_list) / 10)
     fig, ((ax1), (ax2)) = plt.subplots(2, 1, sharey=True, figsize=[9,9])
-    rolling_mean = pd.Series(reward_list).rolling(window).mean()
+    rolling_mean = pd.Series(loss_list).rolling(window).mean()
 
-    std = pd.Series(reward_list).rolling(window).std()
+    std = pd.Series(loss_list).rolling(window).std()
     ax1.plot(rolling_mean)
-    ax1.fill_between(range(len(reward_list)),rolling_mean-std, rolling_mean+std, color='orange', alpha=0.2)
+    ax1.fill_between(range(len(loss_list)), rolling_mean - std, rolling_mean + std, color='orange', alpha=0.2)
     ax1.set_title('Loss Moving Average ({}-episode window)'.format(window))
     ax1.set_xlabel('Episode'); ax1.set_ylabel('Loss')
     plt.grid()
 
-    x = np.arange(len(reward_list))
-    ax2.scatter(x, reward_list, s=1.3)
-    ax2.plot(reward_list,alpha=0.3, linewidth=0.8)
+    x = np.arange(len(loss_list))
+    ax2.scatter(x, loss_list, s=1.3)
+    ax2.plot(loss_list, alpha=0.3, linewidth=0.8)
     ax2.set_title('Loss')
     ax2.set_xlabel('Episode'); ax2.set_ylabel('Loss')
 
@@ -88,3 +90,48 @@ def plot_loss(reward_list):
     plt.show()
     # plt.pause(0.001)
     plt.close()
+
+# Based on https://discuss.pytorch.org/t/check-gradient-flow-in-network/15063/10
+def plot_grad_flow(named_parameters):
+    '''Plots the gradients flowing through different layers in the net during training.
+    Can be used for checking for possible gradient vanishing / exploding problems.
+
+    Usage: Plug this function in Trainer class after loss.backwards() as
+    "plot_grad_flow(self.model.named_parameters())" to visualize the gradient flow'''
+    ave_grads = []
+    max_grads = []
+    layers = []
+    for n, p in named_parameters:
+        if (p.requires_grad) and ("bias" not in n):
+            layers.append(n)
+            ave_grads.append(p.grad.abs().mean())
+            max_grads.append(p.grad.abs().max())
+    plt.bar(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
+    plt.bar(np.arange(len(max_grads)), ave_grads, alpha=0.1, lw=1, color="b")
+    plt.hlines(0, 0, len(ave_grads) + 1, lw=2, color="k")
+    plt.xticks(range(0, len(ave_grads), 1), layers, rotation="vertical")
+    plt.xlim(left=0, right=len(ave_grads))
+    plt.ylim(bottom=-0.001, top=0.02)  # zoom in on the lower gradient regions
+    plt.xlabel("Layers")
+    plt.ylabel("average gradient")
+    plt.title("Gradient flow")
+    plt.grid(True)
+    plt.show()
+
+def count_parameters(model):
+    table = PrettyTable(["Modules", "Parameters"])
+    total_params = 0
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad: continue
+        param = parameter.numel()
+        table.add_row([name, param])
+        total_params += param
+    print(table)
+    print(f"Total Trainable Params: {total_params}")
+    return total_params
+
+def timestamp():
+    datetime.now(tz=None)
+    timestampStr = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    # print('Current Timestamp : ', timestampStr)
+    return timestampStr

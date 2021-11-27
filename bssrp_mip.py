@@ -12,6 +12,7 @@ class BSSRPMIP(object):
 		use_penalties:bool, 
 		no_bikes_leaving:bool,
 		solver_time_limit:float=1e5,
+		silent:bool=True,
 		tol:float=1e-5):
 
 		""" 
@@ -36,6 +37,7 @@ class BSSRPMIP(object):
 		self.no_bikes_leaving = no_bikes_leaving
 		self.solver_time_limit = solver_time_limit
 		self.tol = tol
+		self.silent = silent
 
 		# collect needed info from instance 
 		self.capacity = self.graph.max_load
@@ -85,6 +87,8 @@ class BSSRPMIP(object):
 
 		# initialize model
 		self.model = gp.Model()
+		if self.silent:
+			self.model.setParam('OutputFlag', 0)
 		self.model.setParam('TimeLimit', self.solver_time_limit)
 
 		self.add_variables()
@@ -486,3 +490,14 @@ class BSSRPMIP(object):
 			print(f'    Cost:', self.get_cost_of_route(self.routes[k]), '\n')
 
 		return
+
+
+	def get_minimal_routes(self):
+		""" Returns the minimal routes. """
+		route_list = []
+		for _, v in self.routes.items():
+			if len(v) == 0:
+				continue
+			route_list.append(v)
+		return route_list
+

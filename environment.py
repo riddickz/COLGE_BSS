@@ -6,6 +6,7 @@ This file contains the definition of the environment
 in which the agents are run.
 """
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Environment:
     def __init__(self, graph_dict, name):
@@ -25,7 +26,14 @@ class Environment:
         self.prev_demand = np.abs(self.dynamic[2, 1:]).sum()
         self.trip_count = 0
         self.edge_index, _ = self.graph.get_edge()
-        return self.state, self.graph.W
+        self.mask = self.mask_reset()
+
+        return self.state, self.graph.W, self.mask
+
+    def mask_reset(self):
+        mask = torch.zeros_like(self.dynamic[0]).unsqueeze(0).int().to(device)
+        mask[:,0] = 1
+        return mask
 
     def compute_state(self):
         state = torch.cat((self.dynamic,self.static.T),dim=0)
@@ -43,6 +51,8 @@ class Environment:
         chosen_idx = action.item()
 
         if chosen_idx == 0:
+            # tmp = (1 - self.dynamic[0][1:])*self.dynamic[2][1:]
+            # new_load = torch.clamp(tmp.sum(), max=self.graph.max_load, min= -self.graph.max_load)
             new_load = 0
             new_demand = 0
         else:
@@ -52,7 +62,7 @@ class Environment:
 
         # Updates the dynamic(observation, load, demand)
         self.dynamic[0, chosen_idx] = 1
-        self.dynamic[1] = new_load
+        self.dynamic[1, chosen_idx] = new_load
         self.dynamic[2, chosen_idx] = new_demand
         self.dynamic[3, :] = 0  # current node
         self.dynamic[3, chosen_idx] = 1
@@ -77,17 +87,19 @@ class Environment:
         if chosen_idx == 0:
             self.trip_count += 1
 
-        info = (self.prev_node, self.t_total, self.tour_indices, back_depot)
-
-        demand_met = bool((self.dynamic[0] != 0).all())
-        all_car_used =  bool(self.trip_count == self.graph.num_vehicles)
+        all_car_used =  bool(self.trip_count == self.graph.num_vehicles+1)
+        all_node_visit = bool((self.dynamic[0] != 0).all())
+        # demand_met = bool(np.abs(self.dynamic[2]).sum() == 0 )
 
         # terminal case
-        if demand_met or all_car_used:
+        if all_node_visit or all_car_used:
             reward += self.get_terminal_reward(chosen_idx, new_load)
+            # reward += self.get_terminal_reward(chosen_idx)
 
-            self.t_total += self.get_travel_dist(chosen_idx, 0)
-            self.tour_indices.append(0)
+            if chosen_idx != 0:
+                self.t_total += self.get_travel_dist(chosen_idx, 0)
+                self.tour_indices.append(0)
+
             done = True
 
             print("#" * 100)
@@ -98,7 +110,60 @@ class Environment:
             print("Games Finished: ", self.games)
 
         self.state = self.compute_state()
+        self.compute_mask(back_depot)
+        info = (self.prev_node, self.t_total, self.tour_indices, self.mask)
         return (self.state, reward, done, info)
+
+    def compute_mask(self,back_depot):
+        with torch.no_grad():
+            state = self.state
+
+        visited_nodes = state[0].int()
+
+        if (state[3] == 1).nonzero().any():
+            cur_node = (state[3] == 1).nonzero().item()
+        else:
+            cur_node = 0
+
+        if (state[4] == 1).nonzero().any():
+            last_node = (state[4] == 1).nonzero().item()
+        else:
+            last_node = 0
+
+        nbr_nodes = (self.graph.W[cur_node] > 0).int()
+        uncovered_nodes = (visited_nodes[:] == 0).int()
+        # uncovered_nodes = (state[2][:] != 0).int()
+
+        mask = nbr_nodes * uncovered_nodes
+        mask[0] = 1  # depot is always available unless last visit
+        mask[last_node] = 0
+        mask[cur_node] = 0  # mask out visited node
+
+        mask2 = uncovered_nodes  # mask2 without neighbor node restriction
+        mask2[0] = 1  # depot is always available unless last visit
+        mask2[last_node] = 0
+        mask2[cur_node] = 0  # mask out visited node
+
+        if (visited_nodes == 1).all():
+            # all nodes are visited and go back to depot
+            mask[:] = 0
+            mask[0] = 1
+
+        elif back_depot and (last_node > 0) and (cur_node > 0):
+            # Time limit constraint: all vehicles must start at the depot and return to the depot within a limited time.
+            mask[:] = 0
+            mask[0] = 1
+
+        elif not (mask[1:] == 1).any():
+            # no  neighbor node to go
+            mask = mask2
+
+        else:
+            pass
+
+        self.mask = mask.unsqueeze(0)
+
+        return self.mask
 
 
     def get_terminal_reward(self, chosen_idx, excess):
@@ -107,8 +172,8 @@ class Environment:
         reward += self.get_travel_dist(chosen_idx, 0) # time to go back to depot
         reward += excess * self.graph.penalty_cost_demand # additional bikes on vehicle
         reward += self.get_overage_last_step(chosen_idx)  * self.graph.penalty_cost_time # overtime
-        # reward += self._get_demand() * self.graph.penalty_cost_demand # difference in unmet demand
-        return torch.tensor([-reward])
+        reward += self._get_demand() * self.graph.penalty_cost_demand # difference in unmet demand
+        return torch.tensor([-reward])/500
 
     def get_reward(self, chosen_idx):
         """ Gets the reward action.  """
@@ -116,7 +181,7 @@ class Environment:
         demand_reward = self.get_demand_reward(chosen_idx) * self.graph.penalty_cost_demand # difference in unmet demand
         overage_time = self.get_overage_time(chosen_idx) * self.graph.penalty_cost_time # overtime
         reward = travel_dist + overage_time + demand_reward
-        return torch.tensor([-reward])
+        return torch.tensor([-reward])/500
 
     def get_overage_last_step(self, chosen_idx):
         """ Gets the overage time for moving to the depot in the last step.  """
@@ -176,103 +241,10 @@ class Environment:
         return np.abs(self.dynamic[2]).sum()
 
 
-    #     chosen_idx = action.item()
-    #     t, reward, done = self.get_reward(chosen_idx)
-    #
-    #     # Clone the dynamic variable so we don't mess up graph
-    #     all_loads = self.dynamic[1].clone()
-    #     all_demands = self.dynamic[2].clone()
-    #
-    #     load = all_loads[chosen_idx]
-    #     demand = all_demands[chosen_idx]
-    #
-    #     # Loading and supplying constraint
-    #     # if we've chosen to visit a city, try to satisfy as much demand as possible
-    #     new_load = torch.clamp(load - demand, max=self.graph.max_load, min=0)
-    #     if demand >= 0:
-    #         new_demand = torch.clamp(demand - load, min=0)
-    #     else:
-    #         new_demand = torch.clamp(demand + (self.graph.max_load - load), max=0)
-    #
-    #     # # Updates the dynamic(observation, load, demand)m node_idx,tour values
-    #     # if all_demands[chosen_idx] == 0:
-    #     #     self.dynamic[0, chosen_idx] = 1  # node is covered if demand is met
-    #     # else:
-    #     #     self.dynamic[0, chosen_idx] = 0
-    #
-    #     self.dynamic[0, chosen_idx] = 1
-    #     self.dynamic[1] = new_load
-    #     self.dynamic[2, chosen_idx] = new_demand
-    #     self.dynamic[3, :] = 0  # current node
-    #     self.dynamic[3, chosen_idx] = 1
-    #     self.dynamic[4, :] = 0  # previous node
-    #     self.dynamic[4, self.prev_node] = 1
-    #
-    #     if (self.dynamic[5].sum() >= self.graph.time_limit):
-    #         self.dynamic[5, :] = 0
-    #         back_depot = True
-    #     else:
-    #         self.dynamic[5, chosen_idx] = t  # previous node
-    #         back_depot = False
-    #
-    #     self.prev_node = chosen_idx
-    #     self.t_total += t.item()
-    #     self.tour_indices.append(chosen_idx)
-    #     if chosen_idx == 0:
-    #         self.trip_count += 1
-    #
-    #     info = (self.prev_node, self.t_total, self.tour_indices, back_depot)
-    #
-    #     self.state = self.compute_state()
-    #
-    #     return (self.state, reward, done, info)
-    #
-    # def get_reward(self, chosen_idx):
-    #     done = False
-    #     prev_node = torch.where(self.dynamic[4] == 1)
-    #
-    #     t = self.graph.W_weighted[chosen_idx, prev_node]
-    #
-    #     demand = np.abs(self.dynamic[2, 1:]).sum()
-    #     # demand_chg = self.prev_demand - demand
-    #     # reward = - t + demand_chg
-    #     reward = - t
-    #     # print(t, demand_chg)
-    #
-    #     self.prev_demand = demand
-    #
-    #     # Terminal State
-    #     timeout = bool(self.t_total >= self.graph.time_limit * self.graph.num_vehicles)
-    #     full_visit = (self.dynamic[0] != 0).all()
-    #
-    #     if timeout or full_visit or demand == 0: #or self.trip_count ==3:
-    #         time_depot = self.graph.W_weighted[0, chosen_idx]  # travel back to depot
-    #         reward -= (time_depot + 3*demand)  # t_ij * x_ijk + β(p_b+ + p_b−)
-    #         self.t_total += time_depot
-    #         self.tour_indices.append(0)
-    #         done = True
-    #
-    #         if demand == 0:
-    #             print("Zero Demands!")
-    #         elif timeout:
-    #             print("Time Out!")
-    #         elif full_visit:
-    #             print("Full Visit!")
-    #
-    #         print("Tour: ", self.tour_indices)
-    #         print("Tour Time Cost: ", self.t_total.item())
-    #         print("Left Demand: ", demand)
-    #         print("Node Visits: ", len(self.tour_indices))
-    #         print("Games Finished: ", self.games)
-    #         print("#" * 100)
-    #     # print("visit node:{}, reward:{}, done:{}:".format(chosen_idx, reward, done))
-    #     # print("#"*100)
-    #     return t, reward, done
-
     def render(self, save_path=None):
         """Plots the found solution."""
         plt.ion()
-        plt.figure(0, figsize=(7, 7))
+        plt.figure(0, figsize=(10, 10))
 
         nodes = self.graph.static.numpy()
         W = self.graph.W.detach().numpy()

@@ -5,7 +5,7 @@
 /utils/graph_conv.py
 /log
 /.idea/other.xml
-/scratch.py
+/scratch/scratch.py
 /.idea/shelf/Changes1/shelved.patch
 /tgcn.py
 /.idea/workspace.xml
@@ -14,8 +14,8 @@
 .ipynb_checkpoints/
 __pycache__/
  *.lp
-/scractch2
-/scratch3.py
-/scratch4.py
-/scratch5.py
+/scratch/scractch2
+/scratch/scratch3.py
+/scratch/scratch4.py
+/scratch/scratch5.py
 /model_scratch.py

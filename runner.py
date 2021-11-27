@@ -23,22 +23,20 @@ class Runner:
         epsilon_list = []
 
         for i_episode in range(max_episode):
-            s, adj_mat = self.env.reset(g)
-            back_depot = False
+            s, adj_mat,mask = self.env.reset(g)
             ep_r = 0
             ep_loss = []
             ep_eps = []
 
 
             for i in range(0, max_iter):
-                a = self.agent.choose_action(s, adj_mat, back_depot)
+                a = self.agent.choose_action(s, adj_mat, mask)
 
                 # obtain the reward and next state and some other information
                 s_, r, done, info = self.env.step(a)
-                back_depot = info[3]
 
                 # Store the transition in memory
-                self.agent.memory.push(s, a, r, s_, adj_mat)
+                self.agent.memory.push(s, a, r, s_, adj_mat, mask)
                 self.agent.memory_counter += 1
 
                 ep_r += r.item()
@@ -59,6 +57,7 @@ class Runner:
 
                 # use next state to update the current state.
                 s = s_
+                mask = info[3]
 
             reward_list.append(ep_r)
             if len(ep_loss) != 0:
@@ -80,7 +79,7 @@ class Runner:
         print("\nCollecting experience...")
         for epoch_ in range(max_epoch):
             print(" -> epoch : " + str(epoch_))
-            for g in range(1, games + 1):
+            for g in range(games):
                 print(" -> games : " + str(g))
                 reward_list, loss_list, epsilon_list = self.train(g, max_episode, max_iter)
 
@@ -100,15 +99,13 @@ class Runner:
         return cumul_reward_list, cumul_loss_list, cumul_epsilon_list
 
     def validate(self, g, max_iter):
-        s, adj_mat = self.env.reset(g)
-        back_depot = False
+        s, adj_mat,mask = self.env.reset(g)
         ep_r = 0
 
         for i in range(0, max_iter):
-            a = self.agent.choose_action(s, adj_mat, back_depot)
+            a = self.agent.choose_action(s, adj_mat, mask)
             s_, r, done, info = self.env.step(a)
 
-            back_depot = info[3]
             ep_r += r.item()
 
             if done:
@@ -116,6 +113,7 @@ class Runner:
                 break
 
             s = s_
+            mask = info[3]
 
         if self.render_on:
             self.env.render()
