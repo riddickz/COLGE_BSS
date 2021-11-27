@@ -8,9 +8,10 @@ in which the agents are run.
 
 
 class Environment:
-    def __init__(self, graph_dict, name):
+    def __init__(self, graph_dict, name, verbose=True):
         self.graph_dict = graph_dict
         self.name = name
+        self.verbose = verbose
 
     def reset(self, g):
         self.games = g
@@ -90,12 +91,13 @@ class Environment:
             self.tour_indices.append(0)
             done = True
 
-            print("#" * 100)
-            print("Tour: ", self.tour_indices)
-            print("Tour Time: ", self.t_total.item())
-            print("Left Demand: ", np.abs(self.dynamic[2]).sum())
-            print("Node Visits: ", len(self.tour_indices))
-            print("Games Finished: ", self.games)
+            if self.verbose:
+                print("#" * 100)
+                print("Tour: ", self.tour_indices)
+                print("Tour Time: ", self.t_total.item())
+                print("Left Demand: ", np.abs(self.dynamic[2]).sum())
+                print("Node Visits: ", len(self.tour_indices))
+                print("Games Finished: ", self.games)
 
         self.state = self.compute_state()
         return (self.state, reward, done, info)
