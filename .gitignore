@@ -21,3 +21,5 @@ __pycache__/
 /model_scratch.py
 /scratch/
 /result/
+logs/
+trained_models/
