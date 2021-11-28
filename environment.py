@@ -26,13 +26,13 @@ class Environment:
         self.tour_indices = [0]
         self.prev_demand = np.abs(self.dynamic[2, 1:]).sum()
         self.trip_count = 0
-        self.edge_index, _ = self.graph.get_edge()
+        # self.edge_index, _ = self.graph.get_edge()
         self.mask = self.mask_reset()
 
         return self.state, self.graph.W, self.mask
 
     def mask_reset(self):
-        mask = torch.zeros_like(self.dynamic[0]).unsqueeze(0).int().to(device)
+        mask = torch.zeros_like(self.dynamic[0]).unsqueeze(0).int()
         mask[:,0] = 1
         return mask
 
@@ -88,9 +88,9 @@ class Environment:
         if chosen_idx == 0:
             self.trip_count += 1
 
+        demand_met = bool(np.abs(self.dynamic[2]).sum() == 0 )
         all_car_used =  bool(self.trip_count == self.graph.num_vehicles+1)
         all_node_visit = bool((self.dynamic[0] != 0).all())
-        # demand_met = bool(np.abs(self.dynamic[2]).sum() == 0 )
 
         # terminal case
         if all_node_visit or all_car_used:

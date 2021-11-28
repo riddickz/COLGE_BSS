@@ -1,80 +1,11 @@
 import torch
-import torch.nn.functional as F
 import torch.nn as nn
 from labml_helpers.module import Module
-import torch_geometric as tg
-from torch_geometric.nn import GCN2Conv, GCNConv
-from torch.nn import Linear
 import os
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-class GCN_PYG(torch.nn.Module):
-    def __init__(self, input_dim, feature_dim, hidden_dim, output_dim, edge_weight,
-                 feature_pre=True, layer_num=2, dropout=True, **kwargs):
-        super(GCN_PYG, self).__init__()
-        self.feature_pre = feature_pre
-        self.layer_num = layer_num
-        self.dropout = dropout
-        if feature_pre:
-            self.linear_pre = nn.Linear(input_dim, feature_dim)
-            self.conv_first = tg.nn.GCNConv(feature_dim, hidden_dim, edge_weight)
-        else:
-            self.conv_first = tg.nn.GCNConv(input_dim, hidden_dim)
-        self.conv_hidden = nn.ModuleList([tg.nn.GCNConv(hidden_dim, hidden_dim) for i in range(layer_num - 2)])
-        self.conv_out = tg.nn.GCNConv(hidden_dim, output_dim)
-
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-        if self.feature_pre:
-            x = self.linear_pre(x)
-        x = self.conv_first(x, edge_index)
-        x = F.relu(x)
-        if self.dropout:
-            x = F.dropout(x, training=self.training)
-        for i in range(self.layer_num - 2):
-            x = self.conv_hidden[i](x, edge_index)
-            x = F.relu(x)
-            if self.dropout:
-                x = F.dropout(x, training=self.training)
-        x = self.conv_out(x, edge_index)
-        x = F.normalize(x, p=2, dim=-1)
-        return x
-
-
-class GCN2_Net(torch.nn.Module):
-    def __init__(self, input_channels, output_channels, hidden_channels, num_layers, alpha, theta,
-                 shared_weights=True, dropout=0.0):
-        super(GCN2_Net, self).__init__()
-        self.lins = torch.nn.ModuleList()
-        self.lins.append(Linear(input_channels, hidden_channels))
-        self.lins.append(Linear(hidden_channels, output_channels))
-
-        self.convs = torch.nn.ModuleList()
-
-        for layer in range(num_layers):
-            self.convs.append(
-                GCN2Conv(hidden_channels, alpha, theta, layer + 1,
-                         shared_weights, normalize=True))
-
-        self.dropout = dropout
-
-    def forward(self, x, edge_index):
-        x = F.dropout(x, self.dropout, training=self.training)
-        x = x_0 = self.lins[0](x).relu()
-
-        for conv in self.convs:
-            x = F.dropout(x, self.dropout, training=self.training)
-            x = conv(x, x_0, edge_index)
-            x = x.relu()
-
-        x = F.dropout(x, self.dropout, training=self.training)
-        x = self.lins[1](x)
-
-        return x
-
 
 def normalize(A):
     A = A + torch.eye(A.size(1))
@@ -233,16 +164,16 @@ class GraphAttentionV2Layer(Module):
 
         # Mask $e_ij$ based on adjacency matrix.
         e_flat = torch.flatten(e, start_dim=1)
-        adj_mat_flat = torch.flatten(adj_mat, start_dim=1)
+        adj_mat_flat = torch.flatten(adj_mat, start_dim=1).to(device)
         e_flat = e_flat.masked_fill(adj_mat_flat == 0, float('-inf'))
         e = e_flat.unflatten(1, (n_nodes, n_nodes)).unsqueeze(3)
 
         e_ = e
         if mask is not None:
             mask = (1- mask).unsqueeze(2).unsqueeze(3).repeat(1, 1, e.size(2), e.size(3)).to(device)
-            mask = mask * mask.permute(0,2,1,3)
+            mask = torch.eq(mask, mask.permute(0,2,1,3))
             mask_value = torch.finfo(e.dtype).min
-            e_ = e.masked_fill_((1 - mask).int(), mask_value)
+            e_ = e.masked_fill_((~mask), mask_value)
 
         # We then normalize attention scores (or coefficients)
         a = self.softmax(e_)

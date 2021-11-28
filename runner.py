@@ -9,6 +9,9 @@ import agent
 from utils.vis import plot_reward, plot_loss
 import pickle
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 class Runner:
     def __init__(self, environment, agent, verbose=False, render=False):
         self.env = environment
@@ -31,6 +34,7 @@ class Runner:
 
 
             for i in range(0, max_iter):
+                mask = mask.to(device)
                 a = self.agent.choose_action(s, adj_mat, mask)
 
                 # obtain the reward and next state and some other information
@@ -44,16 +48,12 @@ class Runner:
 
                 # if the experience replay buffer is filled, DQN begins to learn or update its parameters
                 if self.agent.memory_counter > self.agent.mem_capacity:
-                    print("LEARNING")
                     loss, epsilon =self.agent.learn()
                     ep_loss.append(loss.item())
                     ep_eps.append(epsilon)
 
                     if done:
                         print('Ep: ', i_episode, ' |', 'Ep_r: ', round(ep_r, 2))
-
-                else:
-                    print("NOTLEARNING")
 
                 if done:
                     # if game is over, then skip the while loop.

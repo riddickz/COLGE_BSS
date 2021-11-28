@@ -6,8 +6,6 @@ import models
 from utils.config import load_model_config
 import torch
 from collections import namedtuple, deque
-from torch_geometric.utils import from_scipy_sparse_matrix
-from torch.nn.utils.rnn import pad_sequence
 import copy
 from utils.vis import plot_grad_flow,count_parameters,timestamp
 
@@ -24,9 +22,6 @@ environment.
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'reward', 'next_state', 'adj', 'mask'))
-
-data = namedtuple("Data",
-    field_names=["priority", "probability", "weight","index"])
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -53,17 +48,17 @@ class ReplayMemory(object):
 
 class DQAgent:
 
-    def __init__(self, model, lr):
+    def __init__(self, model, lr,bs):
         self.model_name = model
         self.gamma = .99  # 0.99
         self.epsilon_ = 0.8
         self.epsilon_min = 0.05
         self.discount_factor = 0.99
-        self.neg_inf = torch.tensor([-1000])
+        self.neg_inf = -1000
 
         self.target_net_replace_freq = 150  # How frequently target netowrk updates
         self.mem_capacity = 20000 # capacity of experience replay buffer
-        self.batch_size = 64  # batch size of sampling process from buffer
+        self.batch_size = bs  # batch size of sampling process from buffer
 
         # elif self.model_name == 'GCN_Naive':
         #      self.policy_net = models.GCN_Naive(c_in=8, c_out=1, c_hidden=8)
@@ -86,10 +81,11 @@ class DQAgent:
     def choose_action(self, state, adj, mask):
         pr = torch.rand(1)
         if self.epsilon_ > pr:
+            mask = mask.detach().cpu().numpy()
             action = torch.tensor([np.random.choice(np.where(mask[0] == 1)[0])]) # randomly choose any unvisited node + depot
                 # action = torch.tensor([0])  # return to depot
         else:
-            q_a = self.policy_net(state.T.unsqueeze(0), adj.unsqueeze(0), mask).detach().clone()
+            q_a = self.policy_net(state.T.unsqueeze(0), adj.unsqueeze(0), mask).detach().clone().to(device)
             action = torch.argmax(q_a[0,:,0] + (1 - mask) * self.neg_inf).reshape(1)
         return action.to(device)
 
@@ -128,11 +124,11 @@ class DQAgent:
         # calculate the q value of next state
         # q_next = torch.zeros(b_s_.size(0),b_s_.size(1),1, device=device)
         # q_next[non_final_mask]  = self.target_net(non_final_next_states,b_adj).detach()  # detach from computational graph, don't back propagate
-        q_next = self.target_net(b_s_,b_adj,b_mask).detach()  # detach from computational graph, don't back propagate
+        q_next = self.target_net(b_s_,b_adj,b_mask).detach().to(device)  # detach from computational graph, don't back propagate
 
         # select the maximum q value
-        b_r = torch.clamp(b_r, min=-1, max=1)
-        q_target = (b_r.reshape(-1,1) + self.gamma * q_next.max(1)[0]).float()  # (batch_size, 1)
+        b_r = torch.clamp(b_r, min=-1, max=1).to(device)
+        q_target = (b_r.reshape(-1,1) + self.gamma * q_next.max(1)[0]).float().to(device)  # (batch_size, 1)
 
         loss = self.criterion(q_eval, q_target)
         if loss > 0.01:

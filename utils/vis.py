@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
 from datetime import datetime
+import argparse
 
 def visualize_2D(nodes, W, nodes_weight=None): # Plot tour
     plt.figure(figsize=(20,15))
@@ -135,3 +136,13 @@ def timestamp():
     timestampStr = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     # print('Current Timestamp : ', timestampStr)
     return timestampStr
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
