@@ -51,9 +51,9 @@ class DQAgent:
     def __init__(self, model, lr,bs, replace_freq):
         self.model_name = model
         self.gamma = .99  # 0.99
-        self.epsilon_ = 0.8
+        self.epsilon_ = 0.8 #eps
         self.epsilon_min = 0.05
-        self.discount_factor = 0.99
+        self.discount_factor = 0.999
         self.neg_inf = -1000
 
         self.target_net_replace_freq = replace_freq  # How frequently target netowrk updates
@@ -63,7 +63,7 @@ class DQAgent:
         # elif self.model_name == 'GCN_Naive':
         #      self.policy_net = models.GCN_Naive(c_in=8, c_out=1, c_hidden=8)
 
-        self.policy_net = models.GATv2(in_features=8, n_hidden=64, n_classes=1, n_heads=1, dropout=0.0, share_weights=False).to(device)
+        self.policy_net = models.GATv2(in_features=8, n_hidden=64, n_classes=1, n_heads=1,dropout=0.0, share_weights=False).to(device)
         self.target_net = copy.deepcopy(self.policy_net).to(device)
 
         # Define counter, memory size and loss function
@@ -73,7 +73,8 @@ class DQAgent:
         # # ----Define the memory (or the buffer), allocate some space to it. The number
         self.memory = ReplayMemory(self.mem_capacity)
         # ------- Define the optimizer------#
-        self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay= 0.01)
+        # self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay= 0.01)
+        self.optimizer = torch.optim.SGD(self.policy_net.parameters(), lr=lr, momentum= 0.9, weight_decay= 0.01)
 
         # ------Define the loss function-----#
         self.criterion = torch.nn.SmoothL1Loss()

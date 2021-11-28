@@ -2,10 +2,8 @@
 This is the machinnery that runs your agent in an environment.
 
 """
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import agent
 from utils.vis import plot_reward, plot_loss
 import pickle
 
@@ -93,13 +91,14 @@ class Runner:
                 cumul_epsilon_list.extend(epsilon_list)
                 if self.plot_on:
                     plot_reward(cumul_reward_list)
+                    plot_loss(cumul_loss_list[50:])
                     plot_loss(cumul_loss_list)
 
                 if self.verbose:
                     print(" <=> Finished game number: {} <=>\n".format(g))
 
-        with open('train_results.pickle', 'wb') as handle:
-            pickle.dump([cumul_reward_list, cumul_loss_list, cumul_epsilon_list], handle)
+        pickle.dump(cumul_reward_list, open('cumul_reward.pickle', 'wb'))
+        pickle.dump(cumul_loss_list, open('cumul_loss.pickle', 'wb'))
 
         plot_reward(cumul_reward_list)
         plot_loss(cumul_loss_list)

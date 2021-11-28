@@ -51,10 +51,10 @@ class GATv2(Module):
 
         # First graph attention layer where we concatenate the heads
         self.gat_layer1 = GraphAttentionV2Layer(in_features, n_hidden, n_heads,
-                                                is_concat=True, dropout=dropout, share_weights=share_weights)
+                                                is_concat=False, dropout=dropout, share_weights=share_weights)
 
         self.gat_layer = GraphAttentionV2Layer(n_hidden, n_hidden, n_heads,
-                                                is_concat=True, dropout=dropout, share_weights=share_weights)
+                                                is_concat=False, dropout=dropout, share_weights=share_weights)
 
 
 
@@ -69,21 +69,21 @@ class GATv2(Module):
 
         self.dropout = nn.Dropout(dropout)
 
-        self.state_value = nn.Sequential(
-            nn.Linear(in_features=n_hidden+3, out_features= n_hidden),
+        self.linear_layers = nn.Sequential(
+            nn.Linear(in_features=n_hidden+4, out_features= n_hidden),
             nn.ReLU(),
             nn.Linear(in_features=n_hidden, out_features=n_classes),
         )
 
     def forward(self, x: torch.Tensor, adj_mat: torch.Tensor, mask):
         x = x.to(device)
-        residual = torch.cat((x[:,:,2].unsqueeze(-1), x[:,:,6:8]), dim=2)
+        residual = torch.cat((x[:,:,1:3], x[:,:,6:8]), dim=2)
         # 1. Obtain node embeddings
         h = self.activation(self.gat_layer1(x, adj_mat,mask))
         # h = self.dropout(h)
 
         h = self.gat_layer(h, adj_mat,mask=None)
-        # x_node = self.activation(h)
+        h = self.activation(h)
 
         # # 2. Readout layer
         # x_graph = torch.mean(x_node, 1).unsqueeze(1).repeat(1,x_node.size(1),1) # global mean pool # TODO check graph embed
@@ -93,7 +93,7 @@ class GATv2(Module):
         h = torch.cat((h, residual), dim=2)
 
         # Linear layer
-        q = self.state_value(h)
+        q = self.linear_layers(h)
         return q
 
 
@@ -164,16 +164,16 @@ class GraphAttentionV2Layer(Module):
 
         # Mask $e_ij$ based on adjacency matrix.
         e_flat = torch.flatten(e, start_dim=1)
-        adj_mat_flat = torch.flatten(adj_mat, start_dim=1).to(device)
+        adj_mat_flat = torch.flatten(adj_mat.unsqueeze(-1).repeat(1,1,1,self.n_heads), start_dim=1).to(device)
         e_flat = e_flat.masked_fill(adj_mat_flat == 0, float('-inf'))
-        e = e_flat.unflatten(1, (n_nodes, n_nodes)).unsqueeze(3)
+        e = e_flat.unflatten(1, (n_nodes, n_nodes,self.n_heads))
 
         e_ = e
-        if mask is not None:
-            mask = (1- mask).unsqueeze(2).unsqueeze(3).repeat(1, 1, e.size(2), e.size(3)).to(device)
-            mask = torch.eq(mask, mask.permute(0,2,1,3))
-            mask_value = torch.finfo(e.dtype).min
-            e_ = e.masked_fill_((~mask), mask_value)
+        # if mask is not None:
+        #     mask = (1- mask).unsqueeze(2).unsqueeze(3).repeat(1, 1, e.size(2), e.size(3)).to(device)
+        #     mask = torch.eq(mask, mask.permute(0,2,1,3))
+        #     mask_value = torch.finfo(e.dtype).min
+        #     e_ = e.masked_fill_((~mask), mask_value)
 
         # We then normalize attention scores (or coefficients)
         a = self.softmax(e_)

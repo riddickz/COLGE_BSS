@@ -132,18 +132,22 @@ class Environment:
         uncovered_nodes = (visited_nodes[:] == 0).int()
         # uncovered_nodes = (state[2][:] != 0).int()
 
-        mask = nbr_nodes * uncovered_nodes
+        cur_load = state[1][last_node]
+        overload = (state[2] + cur_load).gt(self.graph.max_load -1 + cur_load)
+        underload = (state[2] + cur_load).lt(1+cur_load)
+
+        mask = nbr_nodes * uncovered_nodes * ~underload * ~overload
         mask[0] = 1  # depot is always available unless last visit
         mask[last_node] = 0
         mask[cur_node] = 0  # mask out visited node
 
-        mask2 = uncovered_nodes  # mask2 without neighbor node restriction
+        mask2 = uncovered_nodes * ~underload *~overload # mask2 without neighbor node restriction
         mask2[0] = 1  # depot is always available unless last visit
         mask2[last_node] = 0
         mask2[cur_node] = 0  # mask out visited node
 
-        if (visited_nodes == 1).all():
-            # all nodes are visited and go back to depot
+        if (visited_nodes == 1).all() or (mask2[:] == 0).all():
+            # all nodes are visited or no node to go, then go back to depot
             mask[:] = 0
             mask[0] = 1
 
@@ -160,7 +164,6 @@ class Environment:
             pass
 
         self.mask = mask.unsqueeze(0)
-
         return self.mask
 
 
