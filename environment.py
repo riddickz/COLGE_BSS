@@ -9,10 +9,11 @@ in which the agents are run.
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Environment:
-    def __init__(self, graph_dict, name, verbose=True):
+    def __init__(self, graph_dict, name, verbose=True, reward_scale=500):
         self.graph_dict = graph_dict
         self.name = name
         self.verbose = verbose
+        self.reward_scale = reward_scale
 
     def reset(self, g):
         self.games = g
@@ -32,8 +33,8 @@ class Environment:
         return self.state, self.graph.W, self.mask
 
     def mask_reset(self):
-        mask = torch.zeros_like(self.dynamic[0]).unsqueeze(0).int()
-        mask[:,0] = 1
+        mask = torch.ones_like(self.dynamic[0]).unsqueeze(0).int()
+        mask[:,0] = 0
         return mask
 
     def compute_state(self):
@@ -52,8 +53,6 @@ class Environment:
         chosen_idx = action.item()
 
         if chosen_idx == 0:
-            # tmp = (1 - self.dynamic[0][1:])*self.dynamic[2][1:]
-            # new_load = torch.clamp(tmp.sum(), max=self.graph.max_load, min= -self.graph.max_load)
             new_load = 0
             new_demand = 0
         else:
@@ -89,18 +88,15 @@ class Environment:
             self.trip_count += 1
 
         demand_met = bool(np.abs(self.dynamic[2]).sum() == 0 )
-        all_car_used =  bool(self.trip_count == self.graph.num_vehicles+1)
         all_node_visit = bool((self.dynamic[0] != 0).all())
+        all_car_used =  bool(self.trip_count == self.graph.num_vehicles)
 
         # terminal case
         if all_node_visit or all_car_used:
             reward += self.get_terminal_reward(chosen_idx, new_load)
-            # reward += self.get_terminal_reward(chosen_idx)
 
-            if chosen_idx != 0:
-                self.t_total += self.get_travel_dist(chosen_idx, 0)
-                self.tour_indices.append(0)
-
+            self.t_total += self.get_travel_dist(chosen_idx, 0)
+            self.tour_indices.append(0)
             done = True
 
             if self.verbose:
@@ -174,8 +170,8 @@ class Environment:
         reward += self.get_travel_dist(chosen_idx, 0) # time to go back to depot
         reward += excess * self.graph.penalty_cost_demand # additional bikes on vehicle
         reward += self.get_overage_last_step(chosen_idx)  * self.graph.penalty_cost_time # overtime
-        reward += self._get_demand() * self.graph.penalty_cost_demand # difference in unmet demand
-        return torch.tensor([-reward])/500
+        # reward += self._get_demand() * self.graph.penalty_cost_demand # difference in unmet demand
+        return torch.tensor([-reward]) / self.reward_scale
 
     def get_reward(self, chosen_idx):
         """ Gets the reward action.  """
@@ -183,7 +179,7 @@ class Environment:
         demand_reward = self.get_demand_reward(chosen_idx) * self.graph.penalty_cost_demand # difference in unmet demand
         overage_time = self.get_overage_time(chosen_idx) * self.graph.penalty_cost_time # overtime
         reward = travel_dist + overage_time + demand_reward
-        return torch.tensor([-reward])/500
+        return torch.tensor([-reward]) / self.reward_scale
 
     def get_overage_last_step(self, chosen_idx):
         """ Gets the overage time for moving to the depot in the last step.  """
@@ -230,7 +226,7 @@ class Environment:
     def _get_new_load_demand(self, chosen_idx):
         """ Gets the new load and demand from visiting chosen_idx. """
         # difference in unmet demand
-        load_idx = self.dynamic[1].clone()[chosen_idx]
+        load_idx = self.dynamic[1].clone()[self.prev_node]
         demand_idx = self.graph.demands[chosen_idx]
 
         new_load = torch.clamp(load_idx + demand_idx, max=self.graph.max_load, min=0)
