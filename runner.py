@@ -101,6 +101,10 @@ class Runner:
         with open('train_results.pickle', 'wb') as handle:
             pickle.dump([cumul_reward_list, cumul_loss_list, cumul_epsilon_list], handle)
 
+        plot_reward(cumul_reward_list)
+        plot_loss(cumul_loss_list)
+        self.env.render()
+
         return cumul_reward_list, cumul_loss_list, cumul_epsilon_list
 
     def validate(self, g, max_iter, verbose=True, return_route=False):

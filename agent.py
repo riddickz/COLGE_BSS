@@ -48,7 +48,7 @@ class ReplayMemory(object):
 
 class DQAgent:
 
-    def __init__(self, model, lr,bs):
+    def __init__(self, model, lr,bs, replace_freq):
         self.model_name = model
         self.gamma = .99  # 0.99
         self.epsilon_ = 0.8
@@ -56,7 +56,7 @@ class DQAgent:
         self.discount_factor = 0.99
         self.neg_inf = -1000
 
-        self.target_net_replace_freq = 150  # How frequently target netowrk updates
+        self.target_net_replace_freq = replace_freq  # How frequently target netowrk updates
         self.mem_capacity = 20000 # capacity of experience replay buffer
         self.batch_size = bs  # batch size of sampling process from buffer
 

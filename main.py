@@ -36,6 +36,7 @@ parser.add_argument('--time_limit',type=float, default=30.)
 parser.add_argument('--n_car', type=int, metavar='car_nums', default=5, help='number of vehicles used in game')
 parser.add_argument('--verbose', action='store_true', default=True, help='Display cumulative results at each step')
 parser.add_argument('--val', metavar='validation_mode', default=False)
+parser.add_argument('--replace_freq', type=int,default=200., help='How frequently target netowrk updates')
 
 
 def main():
@@ -57,7 +58,7 @@ def main():
                                             time_limit=args.time_limit)
 
         logging.info('Loading agent...')
-        agent_class = agent.Agent(args.model, args.lr, args.bs)
+        agent_class = agent.Agent(args.model, args.lr, args.bs, args.replace_freq)
 
         logging.info('Loading environment %s' % args.environment_name)
         env_train = environment.Environment(graph_dic_train,args.environment_name)
@@ -96,7 +97,7 @@ def main():
                 pickle.dump(graph_dic_val, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
         logging.info('Loading agent...')
-        agent_class = agent.Agent(args.model, args.lr, args.bs)
+        agent_class = agent.Agent(args.model, args.lr, args.bs, args.replace_freq)
         agent_class.load_model("model.pt")
 
         logging.info('Loading environment %s' % args.environment_name)
