@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import os
 import torch
 from scipy import sparse
+from torch_geometric.utils import from_scipy_sparse_matrix
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
@@ -131,6 +132,12 @@ class Graph:
 
         return nx.adjacency_matrix(self.g)
 
+    def get_edge(self):
+        edge_index, edge_weight = from_scipy_sparse_matrix(self.A)
+        edge_index = edge_index.long()
+        edge_weight = edge_weight.float()
+        return edge_index,edge_weight
+
     def get_demands(self):
         """ Gets random demand vector that has zero sum. """
 
@@ -185,6 +192,8 @@ def test():
         speed=30,
         time_limit=120)
     nx.draw(g.g, with_labels=True)
+    edge_index, edge_weight = g.get_edge()
+    print(edge_index)
 
 
 if __name__ == "__main__":
