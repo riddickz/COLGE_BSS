@@ -6,14 +6,16 @@ This file contains the definition of the environment
 in which the agents are run.
 """
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 class Environment:
-    def __init__(self, graph_dict, name, verbose=True, reward_scale=500):
+    def __init__(self, graph_dict, name, verbose=True, reward_scale=500, vehicle_limits=True):
         self.graph_dict = graph_dict
         self.name = name
         self.verbose = verbose
         self.reward_scale = reward_scale
+        self.vehicle_limits = vehicle_limits
 
     def reset(self, g):
         self.games = g
@@ -173,7 +175,8 @@ class Environment:
         reward += self.get_travel_dist(chosen_idx, 0) # time to go back to depot
         reward += excess * self.graph.penalty_cost_demand # additional bikes on vehicle
         reward += self.get_overage_last_step(chosen_idx)  * self.graph.penalty_cost_time # overtime
-        # reward += self._get_demand() * self.graph.penalty_cost_demand # difference in unmet demand
+        if self.vehicle_limits:
+            reward += self._get_demand() * self.graph.penalty_cost_demand # difference in unmet demand
         return torch.tensor([-reward]) / self.reward_scale
 
     def get_reward(self, chosen_idx):
