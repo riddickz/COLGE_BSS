@@ -55,7 +55,7 @@ class Environment:
     #     self.state = self.compute_state()
     #     return self.state
 
-    def update_dynamic(self,chosen_idx,new_load,new_demand):
+    def update_dynamic(self, chosen_idx, prev_idx, new_load, new_demand):
         # Updates the dynamic(observation, load, demand)
         self.dynamic[0, chosen_idx] = 1
         self.dynamic[1, chosen_idx] = new_load
@@ -63,7 +63,7 @@ class Environment:
         self.dynamic[3, :] = 0  # current node
         self.dynamic[3, chosen_idx] = 1
         self.dynamic[4, :] = 0  # previous node
-        self.dynamic[4, self.prev_node] = 1
+        self.dynamic[4, prev_idx] = 1
 
         if self.prev_node == 0:
             self.dynamic[6, :] = 0 # trip overage reset
@@ -73,14 +73,11 @@ class Environment:
         if chosen_idx == 0: # return to depot
             self.dynamic[5, :] = 0 # zero trip time
         else:
-            self.dynamic[5, chosen_idx] = self.get_travel_dist(self.prev_node, chosen_idx)
+            self.dynamic[5, chosen_idx] = self.get_travel_dist(prev_idx, chosen_idx)
 
     def step(self, action):
         done = False
         chosen_idx = action.item()
-
-        self.tour_indices.append(chosen_idx)
-        self.t_total += self.get_travel_dist(self.prev_node, chosen_idx)
 
         if chosen_idx == 0: # reset load and demand to zero per formulation
             new_load = 0
@@ -90,7 +87,13 @@ class Environment:
             new_load, new_demand = self.get_updated_load_and_demand(chosen_idx)
 
         reward = self.get_reward(chosen_idx)
-        self.update_dynamic(chosen_idx, new_load, new_demand)
+        self.update_dynamic(chosen_idx, self.prev_node, new_load, new_demand)
+        self.compute_mask(chosen_idx, self.prev_node)
+
+        self.t_total += self.get_travel_dist(self.prev_node, chosen_idx)
+        self.tour_indices.append(chosen_idx)
+        self.prev_node = chosen_idx
+
 
         # demand_met = bool(np.abs(self.dynamic[2]).sum() == 0 )
         all_node_visit = bool((self.dynamic[0] != 0).all())
@@ -99,15 +102,13 @@ class Environment:
         # terminal case
         if all_node_visit or all_car_used:
             reward += self.get_terminal_reward(chosen_idx, new_load)
+
             self.t_total += self.get_travel_dist(chosen_idx, 0)
             self.tour_indices.append(0)
             done = True
             self.print_info()
 
         self.state = self.compute_state(chosen_idx)
-
-        self.compute_mask(chosen_idx , self.prev_node)
-        self.prev_node = chosen_idx
 
         info = (self.prev_node, self.t_total, self.tour_indices, self.mask)
         return (self.state, reward, done, info)
@@ -313,9 +314,10 @@ class Environment:
         plt.xlabel('X')
         plt.ylabel('Y')
         plt.title("Game {} Time Cost: {}".format(self.games,round(self.t_total.item())))
-        plt.pause(0.001)
-        plt.close()
 
         if save_path is None:
-           save_path = 'render_{}'.format(timestamp())
+           save_path = 'render_{}.pdf'.format(timestamp())
         plt.savefig(save_path, bbox_inches='tight', dpi=200)
+
+        plt.pause(0.001)
+        plt.close()
