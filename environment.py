@@ -8,13 +8,15 @@ in which the agents are run.
 """
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 class Environment:
-    def __init__(self, graph_dict, name, verbose=True, reward_scale=500):
+    def __init__(self, graph_dict, name, verbose=True, reward_scale=500, penalty_unvisited=None):
         self.graph_dict = graph_dict
         self.name = name
         self.verbose = verbose
         self.reward_scale = reward_scale
+        self.penalty_unvisited = penalty_unvisited
 
     def reset(self, g):
         """ Reset graph per game input. """
@@ -30,6 +32,9 @@ class Environment:
         self.prev_demand = np.abs(self.dynamic[2, 1:]).sum()
         self.trip_count = 0
         self.mask = self.mask_reset()
+
+        if self.penalty_unvisited is None:
+            self.penalty_unvisited = self.graph.penalty_cost_demand
 
         return self.state, self.graph.W, self.mask
 
@@ -168,7 +173,8 @@ class Environment:
         reward += self.get_travel_dist(chosen_idx, 0) # time to go back to depot
         reward += excess * self.graph.penalty_cost_demand # additional bikes on vehicle
         reward += self.get_overage_last_step(chosen_idx)  * self.graph.penalty_cost_time # overtime
-        reward += self._get_demand_unvisited() * self.graph.penalty_cost_demand # difference in unmet demand
+        #reward += self._get_demand_unvisited() * self.graph.penalty_cost_demand # difference in unmet demand
+        reward += self._get_demand_unvisited()  *  self.penalty_unvisited
         return torch.tensor([-reward]) / self.reward_scale
 
     def get_reward(self, chosen_idx):
