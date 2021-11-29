@@ -12,6 +12,7 @@ class BSSRPMIP(object):
 		use_penalties:bool, 
 		no_bikes_leaving:bool,
 		solver_time_limit:float=1e5,
+		solver_gap_limit:float=0.0,
 		silent:bool=True,
 		tol:float=1e-5):
 
@@ -36,6 +37,7 @@ class BSSRPMIP(object):
 		self.use_penalties = use_penalties
 		self.no_bikes_leaving = no_bikes_leaving
 		self.solver_time_limit = solver_time_limit
+		self.solver_gap_limit = solver_gap_limit
 		self.tol = tol
 		self.silent = silent
 
@@ -87,8 +89,12 @@ class BSSRPMIP(object):
 
 		# initialize model
 		self.model = gp.Model()
+		self.model.setParam('OutputFlag', 1)
 		if self.silent:
 			self.model.setParam('OutputFlag', 0)
+
+
+		self.model.setParam('MIPGap', self.solver_gap_limit)
 		self.model.setParam('TimeLimit', self.solver_time_limit)
 
 		self.add_variables()
