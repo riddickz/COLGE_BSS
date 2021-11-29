@@ -6,6 +6,7 @@ import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 def normalize(A):
     A = A + torch.eye(A.size(1))

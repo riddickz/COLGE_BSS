@@ -58,7 +58,7 @@ def plot_reward(reward_list):
     ax1.grid()
     ax2.grid()
     fig.tight_layout(pad=2)
-    save_path = 'reward_{}.pdf'.format(timestamp())
+    save_path = 'rl_results/reward_{}.pdf'.format(timestamp())
     plt.savefig(save_path, bbox_inches='tight', dpi=200)
 
     plt.show()
@@ -91,7 +91,7 @@ def plot_loss(loss_list):
     ax1.grid()
     ax2.grid()
     fig.tight_layout(pad=2)
-    save_path = 'loss_{}.pdf'.format(timestamp())
+    save_path = 'rl_results/loss_{}.pdf'.format(timestamp())
     plt.savefig(save_path, bbox_inches='tight', dpi=200)
     plt.show()
     # plt.pause(0.001)

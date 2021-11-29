@@ -37,6 +37,7 @@ parser.add_argument('--n_car', type=int, metavar='car_nums', default=5, help='nu
 parser.add_argument('--verbose', action='store_true', default=True, help='Display cumulative results at each step')
 parser.add_argument('--val', metavar='validation_mode', default=False)
 parser.add_argument('--replace_freq', type=int,default=300, help='How frequently target netowrk updates')
+parser.add_argument('--penalty_unvisited', type=int, default=2, help='obj coeff, penalty_unvisited')
 
 
 def main():
@@ -61,7 +62,7 @@ def main():
         agent_class = agent.Agent(args.model, args.lr, args.bs, args.replace_freq)
 
         logging.info('Loading environment %s' % args.environment_name)
-        env_train = environment.Environment(graph_dic_train,args.environment_name)
+        env_train = environment.Environment(graph_dic_train,args.environment_name, penalty_unvisited=args.penalty_unvisited)
 
         print("Training...")
         runner_train = runner.Runner(env_train, agent_class, args.verbose, render = False)
@@ -101,7 +102,7 @@ def main():
         agent_class.load_model("model.pt")
 
         logging.info('Loading environment %s' % args.environment_name)
-        env_val = environment.Environment(graph_dic_val, args.environment_name)
+        env_val = environment.Environment(graph_dic_val, args.environment_name, penalty_unvisited=args.penalty_unvisited)
 
         print("Validating...")
         runner_val = runner.Runner(env_val, agent_class, args.verbose, render=False)

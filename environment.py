@@ -173,7 +173,6 @@ class Environment:
         reward += self.get_travel_dist(chosen_idx, 0) # time to go back to depot
         reward += excess * self.graph.penalty_cost_demand # additional bikes on vehicle
         reward += self.get_overage_last_step(chosen_idx)  * self.graph.penalty_cost_time # overtime
-        #reward += self._get_demand_unvisited() * self.graph.penalty_cost_demand # difference in unmet demand
         reward += self._get_demand_unvisited()  *  self.penalty_unvisited
         return torch.tensor([-reward]) / self.reward_scale
 
@@ -322,7 +321,7 @@ class Environment:
         plt.title("Game {} Time Cost: {}".format(self.games,round(self.t_total.item())))
 
         if save_path is None:
-           save_path = 'render_{}.pdf'.format(timestamp())
+           save_path = 'rl_results/render_{}.pdf'.format(timestamp())
         plt.savefig(save_path, bbox_inches='tight', dpi=200)
 
         plt.pause(0.001)

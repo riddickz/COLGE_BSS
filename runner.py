@@ -8,7 +8,7 @@ from utils.vis import plot_reward, plot_loss,timestamp
 import pickle
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+device = torch.device("cpu")
 
 class Runner:
     def __init__(self, environment, agent, verbose=False, render=False):
@@ -19,7 +19,6 @@ class Runner:
         self.plot_on = False
 
     def train(self, g, max_episode, max_iter):
-        print("TRAINING")
         reward_list = []
         loss_list = []
         epsilon_list = []
@@ -100,8 +99,8 @@ class Runner:
                 if self.verbose:
                     print(" <=> Finished game number: {} <=>\n".format(g))
 
-        pickle.dump(cumul_reward_list, open('reward_{}.pkl'.format(timestamp()), 'wb'))
-        pickle.dump(cumul_loss_list, open('loss_{}.pkl'.format(timestamp()), 'wb'))
+        pickle.dump(cumul_reward_list, open('rl_results/reward_{}.pkl'.format(timestamp()), 'wb'))
+        pickle.dump(cumul_loss_list, open('rl_results/loss_{}.pkl'.format(timestamp()), 'wb'))
 
         plot_reward(cumul_reward_list)
         plot_loss(cumul_loss_list)

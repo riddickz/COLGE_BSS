@@ -24,6 +24,7 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'reward', 'next_state', 'adj', 'mask'))
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 class ReplayMemory(object):
 
@@ -154,10 +155,17 @@ class DQAgent:
 
     def save_model(self):
         cwd = os.getcwd()
-        torch.save(self.policy_net.state_dict(), cwd + '/model_{}.pt'.format(timestamp()))
+        torch.save(self.policy_net.state_dict(), cwd + '/trained_models/model_{}.pt'.format(timestamp()))
 
     def load_model(self, model_path):
         self.policy_net.load_state_dict(torch.load(model_path))
 
+    def cuda(self):
+        self.policy_net = self.policy_net.cuda()
+        self.target_net = self.target_net.cuda()
+
+    def cpu(self):
+        self.policy_net = self.policy_net.cpu()
+        self.target_net = self.target_net.cpu()
 
 Agent = DQAgent

@@ -22,5 +22,5 @@ __pycache__/
 /scratch/
 /result/
 logs/
-trained_models/
 /check.py
+tmp/
