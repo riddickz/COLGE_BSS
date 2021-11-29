@@ -23,3 +23,4 @@ __pycache__/
 /result/
 logs/
 trained_models/
+/check.py

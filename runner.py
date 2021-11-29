@@ -4,7 +4,7 @@ This is the machinnery that runs your agent in an environment.
 """
 import numpy as np
 import torch
-from utils.vis import plot_reward, plot_loss
+from utils.vis import plot_reward, plot_loss,timestamp
 import pickle
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,7 +69,7 @@ class Runner:
 
             if self.render_on:
                 self.env.render()
-                print("")
+                print("Rendering Env")
 
         return reward_list, loss_list, epsilon_list
 
@@ -77,7 +77,7 @@ class Runner:
         cumul_reward_list = []
         cumul_loss_list = []
         cumul_epsilon_list = []
-
+        CHECK =1000
         # Start training
         print("\nCollecting experience...")
         for epoch_ in range(max_epoch):
@@ -93,12 +93,15 @@ class Runner:
                     plot_reward(cumul_reward_list)
                     plot_loss(cumul_loss_list[50:])
                     plot_loss(cumul_loss_list)
+                if g == CHECK:
+                    plot_reward(cumul_reward_list)
+                    plot_loss(cumul_loss_list[50:])
 
                 if self.verbose:
                     print(" <=> Finished game number: {} <=>\n".format(g))
 
-        pickle.dump(cumul_reward_list, open('cumul_reward.pickle', 'wb'))
-        pickle.dump(cumul_loss_list, open('cumul_loss.pickle', 'wb'))
+        pickle.dump(cumul_reward_list, open('reward_{}.pkl'.format(timestamp()), 'wb'))
+        pickle.dump(cumul_loss_list, open('loss_{}.pkl'.format(timestamp()), 'wb'))
 
         plot_reward(cumul_reward_list)
         plot_loss(cumul_loss_list)

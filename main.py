@@ -22,7 +22,7 @@ parser.add_argument('--agent', metavar='AGENT_CLASS', default='Agent', type=str,
 parser.add_argument('--graph_nbr', type=int, default='5000', help='number of differente graph to generate for the training sample')
 parser.add_argument('--model', type=str, default='GATv2', help='model name')
 parser.add_argument('--ngames', type=int, metavar='n', default='2000', help='number of games to simulate') #1250
-parser.add_argument('--nepisode', type=int, metavar='n', default=10, help='max number of episodes per game')
+parser.add_argument('--nepisode', type=int, metavar='n', default=5, help='max number of episodes per game')
 parser.add_argument('--niter', type=int, metavar='n', default='1000', help='max number of iterations per episode')
 parser.add_argument('--epoch', type=int, metavar='nepoch',default=1, help="number of epochs")
 parser.add_argument('--lr',type=float, default=0.001,help="learning rate")
