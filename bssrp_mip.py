@@ -13,6 +13,7 @@ class BSSRPMIP(object):
 		no_bikes_leaving:bool,
 		solver_time_limit:float=1e5,
 		solver_gap_limit:float=0.0,
+		visit_all:bool=True,
 		silent:bool=True,
 		tol:float=1e-5):
 
@@ -38,6 +39,7 @@ class BSSRPMIP(object):
 		self.no_bikes_leaving = no_bikes_leaving
 		self.solver_time_limit = solver_time_limit
 		self.solver_gap_limit = solver_gap_limit
+		self.visit_all = visit_all
 		self.tol = tol
 		self.silent = silent
 
@@ -113,11 +115,15 @@ class BSSRPMIP(object):
 		self.y_vars = {} # visit vars
 		self.z_vars = {} # demand vars
 		self.f_vars = {} # vehicle vars
+		
 
 		if self.use_penalties:
 			self.t_vars = {}
 			self.d_vars = {}
 			self.gamma_vars = {}
+
+		if not self.visit_all:
+			self.v_vars = {} # visited vars
 
 		# add transport variables to model [x_ijk]
 		for k in self.K:
@@ -168,6 +174,13 @@ class BSSRPMIP(object):
 				for i in self.V:
 					gamma_name = f"gamma_{i}_{k}"
 					self.gamma_vars[gamma_name] = self.model.addVar(obj=0.0, lb=0.0, vtype=gp.GRB.CONTINUOUS, name=gamma_name)
+
+		if not self.visit_all:
+			for i in self.V_0:
+				v_name = f"v_{i}"
+				d_i = np.abs(self.demands[i])
+				self.v_vars[v_name] = self.model.addVar(obj=self.penalty_cost_demand * d_i, vtype=gp.GRB.BINARY, name=v_name)
+
 
 		self.var_dict = {
 			"x" : self.x_vars,
@@ -228,11 +241,18 @@ class BSSRPMIP(object):
 				self.model.addConstr(eq_ == 0, name=f"5_node_in_{i}_{k}")
 			
 		# constraint (6)
-		for i in self.V_0:
-			eq_ = 0
-			for k in self.K:
-				eq_ += self.y_vars[f"y_{i}_{k}"] 
-			self.model.addConstr(eq_ == 1, name=f"6_node_visited_{i}")
+		if self.visit_all:
+			for i in self.V_0:
+				eq_ = 0
+				for k in self.K:
+					eq_ += self.y_vars[f"y_{i}_{k}"] 
+				self.model.addConstr(eq_ == 1, name=f"6_node_visited_{i}")
+		else:
+			for i in self.V_0:
+				eq_ = self.v_vars[f"v_{i}"]
+				for k in self.K:
+					eq_ += self.y_vars[f"y_{i}_{k}"] 
+				self.model.addConstr(eq_ == 1, name=f"6_node_visited_{i}")
 
 		return
 
@@ -350,7 +370,10 @@ class BSSRPMIP(object):
 		for k in self.K:
 			for j in self.V_0:
 				eq_ += self.f_vars[f"f_{j}_0_{k}"]
-		self.model.addConstr(eq_ == self.n_ports, name=f"12_st_elim_sum_f_eq_n")
+		if self.visit_all:
+			self.model.addConstr(eq_ == self.n_ports, name=f"12_st_elim_sum_f_eq_n")
+		else:
+			self.model.addConstr(eq_ <= self.n_ports, name=f"12_st_elim_sum_f_le_n")
 					
 		# constraiant (13)
 		for k in self.K:

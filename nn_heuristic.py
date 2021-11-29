@@ -6,9 +6,10 @@ from graph import Graph
 
 class NearestNeighboursHeuristic(object):
 	
-	def __init__(self, g):
+	def __init__(self, g, visit_all):
 		""" Nearest Neighbours Heurisitic for BSSrp. """
 		self.graph = g
+		self.visit_all = visit_all
 		
 		self.num_nodes = self.graph.num_nodes
 		self.capacity = self.graph.max_load
@@ -29,10 +30,16 @@ class NearestNeighboursHeuristic(object):
 	def get_routes(self):
 		""" Gets all routes. """
 		routes = []
-		while True:
-			if len(self.nodes_to_visit) == 0:
-				break
-			routes.append(self.get_single_route())
+		if not self.visit_all:
+			for i in range(self.num_vehicles):
+				if len(self.nodes_to_visit) == 0:
+					break
+				routes.append(self.get_single_route())	
+		else:
+			while True:
+				if len(self.nodes_to_visit) == 0:
+					break
+				routes.append(self.get_single_route())
 		return routes
 		
 	def get_single_route(self):
@@ -51,6 +58,9 @@ class NearestNeighboursHeuristic(object):
 								
 			# otherwise get next node
 			next_node = self.get_next_node(node, load)
+
+			if not self.visit_all and next_node == 0:
+				break
 			
 			# update load
 			if self.demands[next_node] > 0:
@@ -105,6 +115,12 @@ class NearestNeighboursHeuristic(object):
 			for next_node, dist in sorted_distances:
 				if next_node in candidates:
 					return next_node
-				
+
 		# otherwise, just go to the nearest neighbour
-		return sorted_distances[0][0]   
+		if self.visit_all:
+			return sorted_distances[0][0]
+
+		return 0
+				
+		
+		
