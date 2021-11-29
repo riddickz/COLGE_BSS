@@ -70,7 +70,7 @@ class GATv2(Module):
         self.dropout = nn.Dropout(dropout)
 
         self.linear_layers = nn.Sequential(
-            nn.Linear(in_features=n_hidden+3, out_features= n_hidden),
+            nn.Linear(in_features=n_hidden+4, out_features= n_hidden),
             nn.ReLU(),
             nn.Linear(in_features=n_hidden, out_features=n_hidden),
             nn.ReLU(),
@@ -79,7 +79,7 @@ class GATv2(Module):
 
     def forward(self, x: torch.Tensor, adj_mat: torch.Tensor, mask):
         x = x.to(device)
-        residual = torch.cat((x[:,:,1:3], x[:,:,6].unsqueeze(-1)), dim=2)
+        residual = torch.cat((x[:,:,1:3], x[:,:,6:8]), dim=2)
         # 1. Obtain node embeddings
         h = self.activation(self.gat_layer1(x, adj_mat,mask))
         # h = self.dropout(h)

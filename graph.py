@@ -65,11 +65,13 @@ class Graph:
         cur_node[0] = 1
         prev_node[0] = 1
         trip_time = torch.zeros(self.num_nodes)
+        trip_overage = torch.zeros(self.num_nodes)
+
         loads = torch.zeros(self.num_nodes)
 
         self.static = torch.tensor(self.locations)
         self.observation = torch.zeros(self.num_nodes)
-        self.dynamic = torch.stack((self.observation, loads, demands_tensor, cur_node, prev_node,trip_time),
+        self.dynamic = torch.stack((self.observation, loads, demands_tensor, cur_node, prev_node,trip_time,trip_overage),
                                    dim=0)
 
 

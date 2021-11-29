@@ -44,14 +44,6 @@ class Environment:
         node_dist = torch.tensor(self.graph.W_full[chosen_idx]).unsqueeze(0).float() # dist to neighbor
         state = torch.cat((self.dynamic, node_dist),dim=0)
 
-        # time_overage = torch.zeros_like(node_dist)
-        # if chosen_idx == 0:
-        #     time_overage[:] = 0
-        # else:
-        #     time_overage[chosen_idx] = self.get_overage_time(chosen_idx)
-        #
-        # state = torch.cat((state, time_overage),dim=0)
-
         # state = torch.cat((self.dynamic,self.static.T),dim=0)
         return state.float()
 
@@ -73,6 +65,10 @@ class Environment:
         self.dynamic[4, :] = 0  # previous node
         self.dynamic[4, self.prev_node] = 1
 
+        if self.prev_node == 0:
+            self.dynamic[6, :] = 0 # trip overage reset
+        else:
+            self.dynamic[6, chosen_idx] = self.get_overage_time(chosen_idx)
 
         if chosen_idx == 0: # return to depot
             self.dynamic[5, :] = 0 # zero trip time
