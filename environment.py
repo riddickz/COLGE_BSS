@@ -10,12 +10,13 @@ in which the agents are run.
 device = torch.device("cpu")
 
 class Environment:
-    def __init__(self, graph_dict, name, verbose=True, reward_scale=500, vehicle_limits=True):
+    def __init__(self, graph_dict, name, verbose=True, reward_scale=500, visit_all=False, visit_penalty=5):
         self.graph_dict = graph_dict
         self.name = name
         self.verbose = verbose
         self.reward_scale = reward_scale
-        self.vehicle_limits = vehicle_limits
+        self.visit_all = visit_all
+        self.visit_penalty = visit_penalty
 
     def reset(self, g):
         self.games = g
@@ -175,8 +176,8 @@ class Environment:
         reward += self.get_travel_dist(chosen_idx, 0) # time to go back to depot
         reward += excess * self.graph.penalty_cost_demand # additional bikes on vehicle
         reward += self.get_overage_last_step(chosen_idx)  * self.graph.penalty_cost_time # overtime
-        if self.vehicle_limits:
-            reward += self._get_demand() * self.graph.penalty_cost_demand # difference in unmet demand
+        if not self.visit_all:
+            reward += self._get_demand_unvisited(chosen_idx) * self.visit_penalty # unmet from unvisited nodes
         return torch.tensor([-reward]) / self.reward_scale
 
     def get_reward(self, chosen_idx):
@@ -241,8 +242,18 @@ class Environment:
 
         return new_load, new_demand
 
-    def _get_demand(self):
-        return np.abs(self.dynamic[2]).sum()
+    def _get_demand_unvisited(self, chosen_idx):
+        """ """
+        unvisited_nodes = self.state[0].detach().numpy()
+        unvisited_nodes = np.where(unvisited_nodes == 0)[0].tolist()
+        if chosen_idx in unvisited_nodes:
+            unvisited_nodes.remove(chosen_idx)
+        unvisited_nodes = np.array(unvisited_nodes)
+
+        demand_vector_unvisited = np.abs(self.dynamic[2][unvisited_nodes].detach().numpy())
+        demand_uninvisited = demand_vector_unvisited.sum()
+
+        return demand_uninvisited
 
 
     def render(self, save_path=None):
