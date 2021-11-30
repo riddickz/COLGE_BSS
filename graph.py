@@ -22,7 +22,8 @@ class Graph:
                  penalty_cost_time,
                  speed,
                  time_limit,
-                 bike_load_time=0,
+                 starting_fraction=0.5,
+                 bike_load_time=0.0,
                  max_load=20,
                  max_demand=9,
                  area=10):
@@ -41,6 +42,8 @@ class Graph:
         self.penalty_cost_time = penalty_cost_time
         self.speed = speed
         self.time_limit = time_limit
+        self.starting_fraction = starting_fraction
+        self.num_start = int(self.max_load * self.starting_fraction)
 
         self.rng = np.random.RandomState()
         self.seed_used = None

@@ -33,8 +33,15 @@ class Environment:
         self.trip_count = 0
         self.mask = self.mask_reset()
 
+        # 
+        self.dynamic[1][0] = self.graph.num_start
+
         if self.penalty_unvisited is None:
             self.penalty_unvisited = self.graph.penalty_cost_demand
+
+        self.ep_reward_tour = 0
+        self.ep_reward_demand = 0 
+        self.ep_reward_overage = 0
 
         return self.state, self.graph.W, self.mask
 
@@ -47,7 +54,7 @@ class Environment:
     def compute_state(self,chosen_idx):
         """ Combine graph dynamic feature and static coordinate location. """
         node_dist = torch.tensor(self.graph.W_full[chosen_idx]).unsqueeze(0).float() # dist to neighbor
-        state = torch.cat((self.dynamic, node_dist),dim=0)
+        state = torch.cat((self.dynamic, node_dist), dim=0)
 
         # state = torch.cat((self.dynamic,self.static.T),dim=0)
         return state.float()
@@ -85,7 +92,7 @@ class Environment:
         chosen_idx = action.item()
 
         if chosen_idx == 0: # reset load and demand to zero per formulation
-            new_load = 0
+            new_load = self.graph.num_start
             new_demand = 0
             self.trip_count += 1
         else:
@@ -102,10 +109,11 @@ class Environment:
 
         # demand_met = bool(np.abs(self.dynamic[2]).sum() == 0 )
         all_node_visit = bool((self.dynamic[0] != 0).all())
-        all_car_used =  bool(self.trip_count == self.graph.num_vehicles)
+        #all_car_used =  bool(self.trip_count == self.graph.num_vehicles)
 
         # terminal case
-        if all_node_visit or all_car_used:
+        #if all_node_visit or all_car_used:
+        if all_node_visit:
             reward += self.get_terminal_reward(chosen_idx, new_load)
 
             self.t_total += self.get_travel_dist(chosen_idx, 0)
@@ -116,6 +124,7 @@ class Environment:
         self.state = self.compute_state(chosen_idx)
 
         info = (self.prev_node, self.t_total, self.tour_indices, self.mask)
+
         return (self.state, reward, done, info)
 
     def compute_mask(self, chosen_idx, last_node):
@@ -170,18 +179,32 @@ class Environment:
     def get_terminal_reward(self, chosen_idx, excess):
         """ Gets the reward when terminal state is reached. """
         reward = 0
-        reward += self.get_travel_dist(chosen_idx, 0) # time to go back to depot
-        reward += excess * self.graph.penalty_cost_demand # additional bikes on vehicle
-        reward += self.get_overage_last_step(chosen_idx)  * self.graph.penalty_cost_time # overtime
-        reward += self._get_demand_unvisited()  *  self.penalty_unvisited
+        excess_load = np.abs(self.graph.num_start - excess)
+
+        reward_tour = self.get_travel_dist(chosen_idx, 0) # time to go back to depot
+        reward_demand = excess_load * self.graph.penalty_cost_demand # additional bikes on vehicle
+        reward_overage = self.get_overage_last_step(chosen_idx)  * self.graph.penalty_cost_time # overtime
+        reward = reward_tour + reward_demand + reward_overage
+        
+        self.ep_reward_tour -= reward_tour
+        self.ep_reward_demand -= reward_demand
+        self.ep_reward_overage -= reward_overage
+        
+        assert(self._get_demand_unvisited()  == 0) # done for now to ensure all nodes are visited at termination.
+
         return torch.tensor([-reward]) / self.reward_scale
 
     def get_reward(self, chosen_idx):
         """ Gets the reward action.  """
-        travel_dist = self.get_travel_dist(self.prev_node, chosen_idx) # travel time from prev node to next node
-        demand_reward = self.get_demand_reward(chosen_idx) * self.graph.penalty_cost_demand # difference in unmet demand
-        overage_time = self.get_overage_time(chosen_idx) * self.graph.penalty_cost_time # overtime
-        reward = travel_dist + overage_time + demand_reward
+        reward_tour = self.get_travel_dist(self.prev_node, chosen_idx) # travel time from prev node to next node
+        reward_demand = self.get_demand_reward(chosen_idx) * self.graph.penalty_cost_demand # difference in unmet demand
+        reward_overage = self.get_overage_time(chosen_idx) * self.graph.penalty_cost_time # overtime
+        reward = reward_tour + reward_demand + reward_overage
+
+        self.ep_reward_tour -= reward_tour
+        self.ep_reward_demand -= reward_demand
+        self.ep_reward_overage -= reward_overage
+
         return torch.tensor([-reward]) / self.reward_scale
 
     def get_overage_last_step(self, chosen_idx):
@@ -222,7 +245,7 @@ class Environment:
         """ Gets the unmet demand at a current node or load if returning to depot. """
         load, demand = self._get_new_load_demand(chosen_idx)
         if chosen_idx == 0:
-            return load
+            return np.abs(self.graph.num_start - load)
         else:
             return np.abs(demand)
 

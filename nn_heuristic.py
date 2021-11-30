@@ -45,7 +45,7 @@ class NearestNeighboursHeuristic(object):
 	def get_single_route(self):
 		""" Gets a single route. """
 		
-		load = 0
+		load = self.graph.num_start
 		route = [0]
 		route_time = 0
 		node = 0

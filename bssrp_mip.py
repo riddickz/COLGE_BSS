@@ -10,7 +10,7 @@ class BSSRPMIP(object):
 	def __init__(self, 
 		g:"Graph", 
 		use_penalties:bool, 
-		no_bikes_leaving:bool,
+		fixed_bikes_leaving:bool,
 		solver_time_limit:float=1e5,
 		solver_gap_limit:float=0.0,
 		visit_all:bool=True,
@@ -36,7 +36,7 @@ class BSSRPMIP(object):
 		"""
 		self.graph = g
 		self.use_penalties = use_penalties
-		self.no_bikes_leaving = no_bikes_leaving
+		self.fixed_bikes_leaving = fixed_bikes_leaving
 		self.solver_time_limit = solver_time_limit
 		self.solver_gap_limit = solver_gap_limit
 		self.visit_all = visit_all
@@ -50,6 +50,7 @@ class BSSRPMIP(object):
 		self.num_vehicles = self.graph.num_vehicles
 		self.time_limit = self.graph.time_limit
 		self.bike_load_time = self.graph.bike_load_time
+		self.num_start = self.graph.num_start
 
 		# penalty constraints
 		self.penalty_cost_demand = self.graph.penalty_cost_demand
@@ -293,11 +294,13 @@ class BSSRPMIP(object):
 
 				self.model.addConstr(eq_ == 0, name=f"9_bike_loading_{i}_{k}")
 
-		# constraint for no bikes leaving
-		if self.no_bikes_leaving:
+		# constraint for fixed number of bikes leaving the depot
+		if self.fixed_bikes_leaving:
 			for k in self.K:
 				for j in self.V_0:
-					self.model.addConstr(self.z_vars[f"z_{0}_{j}_{k}"] == 0, name=f"9_no_leaving_{0}_{j}_{k}")
+					x_name = f"x_{0}_{j}_{k}"
+					z_name = f"z_{0}_{j}_{k}"
+					self.model.addConstr(self.z_vars[z_name] == self.num_start * self.x_vars[x_name], name=f"9_fixed_leaving_{0}_{j}_{k}")
 
 		return
 
