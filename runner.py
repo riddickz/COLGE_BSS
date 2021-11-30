@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from utils.vis import plot_reward, plot_loss,timestamp
 import pickle
+from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = torch.device("cpu")
@@ -18,7 +19,7 @@ class Runner:
         self.render_on = render
         self.plot_on = False
 
-    def train(self, g, max_episode, max_iter):
+    def train(self, g, max_episode, max_iter, iter_count, writer):
         reward_list = []
         loss_list = []
         epsilon_list = []
@@ -62,36 +63,54 @@ class Runner:
                 mask = info[3]
 
             reward_list.append(ep_r)
+            loss_avg = np.mean(ep_loss)
+            eps_avg = np.mean(ep_eps)
             if len(ep_loss) != 0:
-                loss_list.append(np.mean(ep_loss))
-                epsilon_list.append(np.mean(ep_eps))
+                loss_list.append(loss_avg)
+                epsilon_list.append(eps_avg)
 
+            # collect training tracking info
+            writer.add_scalar("ep_r", ep_r, iter_count)
+            writer.add_scalar('loss_avg', loss_avg, iter_count)
+            writer.add_scalar('eps_avg', eps_avg, iter_count)
+
+            for name, weight in self.agent.policy_net.named_parameters():
+                if (weight.grad is not None) and iter_count % 100 == 0 \
+                        and (weight.requires_grad) and ("bias" not in name):
+                        writer.add_histogram(name, weight, iter_count)
+                        writer.add_histogram(f'{name}.grad', weight.grad, iter_count)
+            iter_count+=1
+
+            # render trips
             if self.render_on:
                 self.env.render()
                 print("Rendering Env")
 
-        return reward_list, loss_list, epsilon_list
+        return reward_list, loss_list, epsilon_list, iter_count
 
     def train_loop(self, games, max_epoch, max_episode=30, max_iter=1000):
+        writer = SummaryWriter()
         cumul_reward_list = []
         cumul_loss_list = []
         cumul_epsilon_list = []
         CHECK =1000
+        itr_count = 0 # episode counter for tensorboard
         # Start training
         print("\nCollecting experience...")
         for epoch_ in range(max_epoch):
             print(" -> epoch : " + str(epoch_))
             for g in range(games):
                 print(" -> games : " + str(g))
-                reward_list, loss_list, epsilon_list = self.train(g, max_episode, max_iter)
-
+                reward_list, loss_list, epsilon_list, itr_count = self.train(g, max_episode, max_iter, itr_count, writer)
                 cumul_reward_list.extend(reward_list)
                 cumul_loss_list.extend(loss_list)
                 cumul_epsilon_list.extend(epsilon_list)
+
                 if self.plot_on:
                     plot_reward(cumul_reward_list)
                     plot_loss(cumul_loss_list[50:])
                     plot_loss(cumul_loss_list)
+
                 if g == CHECK:
                     plot_reward(cumul_reward_list)
                     plot_loss(cumul_loss_list[50:])
@@ -105,7 +124,7 @@ class Runner:
         plot_reward(cumul_reward_list)
         plot_loss(cumul_loss_list)
         self.env.render()
-
+        writer.close()
         return cumul_reward_list, cumul_loss_list, cumul_epsilon_list
 
     def validate(self, g, max_iter, verbose=True, return_route=False):
