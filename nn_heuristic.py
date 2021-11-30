@@ -19,8 +19,8 @@ class NearestNeighboursHeuristic(object):
 		self.time_limit = self.graph.time_limit
 
 		self.nodes_visited = []
+		self.tour_count = 0
 		self.nodes_to_visit = set(range(1, self.num_nodes))
-		
 
 	def run(self):
 		""" Runs the nearest neighbours heuristic. """
@@ -30,16 +30,12 @@ class NearestNeighboursHeuristic(object):
 	def get_routes(self):
 		""" Gets all routes. """
 		routes = []
-		if not self.visit_all:
-			for i in range(self.num_vehicles):
-				if len(self.nodes_to_visit) == 0:
-					break
-				routes.append(self.get_single_route())	
-		else:
-			while True:
-				if len(self.nodes_to_visit) == 0:
-					break
-				routes.append(self.get_single_route())
+		for i in range(self.num_vehicles):
+			self.tour_count += 1
+			if len(self.nodes_to_visit) == 0:
+				break
+			routes.append(self.get_single_route())	
+
 		return routes
 		
 	def get_single_route(self):
@@ -53,9 +49,13 @@ class NearestNeighboursHeuristic(object):
 		while True:
 			
 			# visited all nodes or time limit reached
-			if len(self.nodes_to_visit) == 0 or self.is_time_limit(node, route_time):
+			if len(self.nodes_to_visit) == 0:
 				break
-								
+					
+			# time limit for route reached and not last vehicle			
+			if self.is_time_limit(node, route_time) and (not self.tour_count == self.num_vehicles):
+				break
+
 			# otherwise get next node
 			next_node = self.get_next_node(node, load)
 
