@@ -40,6 +40,8 @@ parser.add_argument('--replace_freq', type=int,default=300, help='How frequently
 parser.add_argument('--penalty_unvisited', type=int, default=2, help='obj coeff, penalty_unvisited')
 parser.add_argument('--starting_fraction', type=float, default=0.5, help='starting amount of bikes to load, as a fraction of max_load')
 parser.add_argument('--reward_scale', type=float, default=500, help='scales the reward')
+parser.add_argument('--max_load', type=int, default=20, help='maximum vehicle capacity' )
+parser.add_argument('--max_demand', type=int, default=9, help='maximum demand at each station' )
 
 
 def main():
@@ -59,7 +61,9 @@ def main():
                                             penalty_cost_time=args.coeff_time,
                                             speed=args.car_speed,
                                             time_limit=args.time_limit,
-                                            starting_fraction=args.starting_fraction)
+                                            starting_fraction=args.starting_fraction,
+                                            max_demand=args.max_demand,
+                                            max_load=args.max_load)
 
         logging.info('Loading agent...')
         agent_class = agent.Agent(args.model, args.lr, args.bs, args.replace_freq)
@@ -95,7 +99,9 @@ def main():
                                                 penalty_cost_time=args.coeff_time,
                                                 speed=args.car_speed,
                                                 time_limit=args.time_limit,
-                                                starting_fraction=args.starting_fraction)
+                                                starting_fraction=args.starting_fraction,
+                                                max_demand=args.max_demand,
+                                                max_load=args.max_load)
 
             # Save Validation Dataset
             with open('graph_dic_val.pickle', 'wb') as handle:
