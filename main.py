@@ -38,7 +38,8 @@ parser.add_argument('--verbose', action='store_true', default=True, help='Displa
 parser.add_argument('--val', metavar='validation_mode', default=False)
 parser.add_argument('--replace_freq', type=int,default=300, help='How frequently target netowrk updates')
 parser.add_argument('--penalty_unvisited', type=int, default=2, help='obj coeff, penalty_unvisited')
-parser.add_argument('--starting_fraction', type=float, default=0.5, help='starting amount of bikes to load, as a fraction of max_laod')
+parser.add_argument('--starting_fraction', type=float, default=0.5, help='starting amount of bikes to load, as a fraction of max_load')
+parser.add_argument('--reward_scale', type=float, default=500, help='scales the reward')
 
 
 def main():
@@ -64,7 +65,7 @@ def main():
         agent_class = agent.Agent(args.model, args.lr, args.bs, args.replace_freq)
 
         logging.info('Loading environment %s' % args.environment_name)
-        env_train = environment.Environment(graph_dic_train,args.environment_name, penalty_unvisited=args.penalty_unvisited)
+        env_train = environment.Environment(graph_dic_train,args.environment_name, penalty_unvisited=args.penalty_unvisited, reward_scale=args.reward_scale)
 
         print("Training...")
         runner_train = runner.Runner(env_train, agent_class, args.verbose, render = False)
@@ -105,7 +106,7 @@ def main():
         agent_class.load_model("model.pt")
 
         logging.info('Loading environment %s' % args.environment_name)
-        env_val = environment.Environment(graph_dic_val, args.environment_name, penalty_unvisited=args.penalty_unvisited)
+        env_val = environment.Environment(graph_dic_val, args.environment_name, penalty_unvisited=args.penalty_unvisited, reward_scale=args.reward_scale)
 
         print("Validating...")
         runner_val = runner.Runner(env_val, agent_class, args.verbose, render=False)
