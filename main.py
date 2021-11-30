@@ -8,6 +8,7 @@ import numpy as np
 import sys
 import pickle
 import os
+import time
 from utils.vis import str2bool
 
 # Set up logger
@@ -50,6 +51,8 @@ def main():
     val_mode = str2bool(args.val)
 
     if not val_mode:
+
+        start_time = time.time()
         graph_dic_train = {}
         for graph_ in range(args.graph_nbr):
             seed = np.random.seed(120 + graph_)
@@ -77,7 +80,15 @@ def main():
         print("Training finished after {} episodes".format(len(cumul_reward_list)))
         agent_class.save_model()
 
+        print("Time to train:", time.time() - start_time)
+
+
+        
+
     if val_mode:
+
+        start_time = time.time()
+
         dataset = 'graph_dic_val.pickle'
         load_data = os.path.isfile(dataset)
 
@@ -119,6 +130,8 @@ def main():
         reward_list  = runner_val.validate_loop(ngames, args.niter)
         print("Validation finished")
         print("RL mean reward:", np.mean(reward_list))
+
+        print("Time to validate:", time.time() - start_time)    
 
 if __name__ == "__main__":
     main()
