@@ -88,8 +88,11 @@ class Runner:
                 cumul_reward_list.extend(reward_list)
                 cumul_loss_list.extend(loss_list)
                 cumul_epsilon_list.extend(epsilon_list)
+
+                scaled_cumul_reward_list = (np.array(cumul_reward_list) * self.env.reward_scale).tolist()
+
                 if self.plot_on:
-                    plot_reward(cumul_reward_list)
+                    plot_reward(scaled_cumul_reward_list)
                     plot_loss(cumul_loss_list[50:])
                     plot_loss(cumul_loss_list)
                 if g == CHECK:
@@ -102,7 +105,8 @@ class Runner:
         pickle.dump(cumul_reward_list, open('rl_results/reward_{}.pkl'.format(timestamp()), 'wb'))
         pickle.dump(cumul_loss_list, open('rl_results/loss_{}.pkl'.format(timestamp()), 'wb'))
 
-        plot_reward(cumul_reward_list)
+        scaled_cumul_reward_list = (np.array(cumul_reward_list) * self.env.reward_scale).tolist()
+        plot_reward(scaled_cumul_reward_list)
         plot_loss(cumul_loss_list)
         self.env.render()
 
