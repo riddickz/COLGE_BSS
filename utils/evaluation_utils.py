@@ -1,3 +1,6 @@
+import sys
+sys.path.append('../')
+
 import numpy as np
 import gurobipy as gp
 import matplotlib.pyplot as plt
@@ -8,8 +11,8 @@ import runner
 import agent
 
 from graph import Graph
-from bssrp_mip import BSSRPMIP
-from nn_heuristic import NearestNeighboursHeuristic
+from baselines import BSSRPMIP
+from baselines import NearestNeighboursHeuristic
 
 from environment import Environment
 
@@ -214,7 +217,7 @@ def evaluate(g, n_instances, seed, rl_agent=None, mip_params=None, freq=10):
 	return results
 	
 
-def render_mip(g, seed, mip_params=None):
+def render_mip(g, seed, mip_params=None, save_path=None):
 	""" Renders a plot for the MIP. """
 	g.seed(seed)
 	g.bss_graph_gen()
@@ -225,12 +228,13 @@ def render_mip(g, seed, mip_params=None):
 	mip_routes = mip.get_minimal_routes()
 	mip_reward, mip_env, _ = eval_mip_sol_in_env(mip, g)
 
-	mip_env.render()
+	mip_env.render(save_path=save_path)
+
 
 	return
 
 
-def render_nn(g, seed, mip_params=None):
+def render_nn(g, seed, mip_params=None, save_path=None):
 	""" Renders a plot for the NN algorithm. """
 	g.seed(seed)
 	g.bss_graph_gen()
@@ -239,14 +243,13 @@ def render_nn(g, seed, mip_params=None):
 	nn = NearestNeighboursHeuristic(g, mip_params["visit_all"])
 	nn_routes = nn.run()
 	nn_reward, nn_env, _ = eval_nn_in_env(nn, g)
-		
-	print("Reward:", nn_reward)
-	nn_env.render()
+
+	nn_env.render(save_path=save_path)
 
 	return
 
 
-def render_rl(g, seed, rl_agent):
+def render_rl(g, seed, rl_agent, save_path=None):
 	""" Renders a plot for the RL agent. """
 	if rl_agent is None:
 		return
@@ -255,7 +258,8 @@ def render_rl(g, seed, rl_agent):
 	g.bss_graph_gen()
 
 	rl_reward, rl_route, rl_env, _ = eval_agent_in_env(rl_agent, g)    
-	rl_env.render()
+
+	rl_env.render(save_path=save_path)
 
 	return
 

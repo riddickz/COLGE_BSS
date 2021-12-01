@@ -341,10 +341,12 @@ class Environment:
 
         plt.xlabel('X')
         plt.ylabel('Y')
-        plt.title("Game {} Time Cost: {}".format(self.games,round(self.t_total.item())))
+        reward = (self.ep_reward_tour + self.ep_reward_demand + self.ep_reward_overage).item()
+        plt.title("Game {} Reward: {}".format(self.games,round(reward, 3)))
 
         if save_path is None:
            save_path = 'rl_results/render_{}.pdf'.format(timestamp())
+
         plt.savefig(save_path, bbox_inches='tight', dpi=200)
 
         plt.pause(0.001)

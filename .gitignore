@@ -28,3 +28,5 @@ tmp/
 *.pdf
 *.pkl
 *.pickle
+*.jpg
+runs/
