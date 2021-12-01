@@ -1,60 +1,21 @@
-# Implementation of Dai and al. paper (Learning combinatorial optimization algorithms over graph) in Python and torch
+# Reinforcement Learning for the Bike Sharing Systems
 
-Source of the Dai and al. paper:
+Bike sharing systems (BSS) have become a popular mode of public transport as they allow commuters to seamlessly borrow a bike from a docking station close to their departure and return it near their destination.  For service providers, a key aspect to maintain customer satisfaction is the ability to maintain properly balanced stations in order to ensure customers are able to pick up or drop off a bike at any station.  One approach to balance stations is through deployment of a set of vehicles that move bikes from stations with excess to those in need, which results in an optimization problem similar to the vehicle routing problem, where the objective depends on both reallocation and tour minimization.  In this work, we propose the use of reinforcement learning and graph neural networks to develop a heuristic for the BSS re-balancing problem. 
 
-```
-@article{dai2017learning,
-  title={Learning Combinatorial Optimization Algorithms over Graphs},
-  author={Dai, Hanjun and Khalil, Elias B and Zhang, Yuyu and Dilkina, Bistra and Song, Le},
-  journal={arXiv preprint arXiv:1704.01665 https://arxiv.org/abs/1704.01665},
-  year={2017}
-}
-```
+## Summary
 
-## Introduction
+The objective of this repo is to implement a reinforment learning agent for the bike sharing system routing problem, which involves complex routing decsions in conjunction with other reward signals such as time limits and meeting both positive and negative demands.  This problem can be viewed as a Markov Decision Process (MDP) and represented by the below image.  
 
-The goal of this study is to implement the work done by Dai and al. who developed a uniﬁed framework to solve combinatorial optimization problem over graph through learning. The model is trained on batch of graphs from a `Erdös-Rényi` and a `Barabási–Albert` degree distribution, with a ﬁx number of node. Firstly, the algorithm learns the structure of the graph through a graph embedding algorithm. A helping function provides as an input the current state of progress of the optimisation. Then it chooses the best node to add to the optimal set through a reinforcement learning algorithm. I have worked on two combinatorial optimization problems, `Minimum Vertex Cover (MVC) ` and `Maximum Cut Set (MAXCUT)`.
+![alt text](https://github.com/riddickzhou/COLGE_BSSVRP/blob/RL_bike_tmp/.idea/mdp.png)
+
+
 
 ## Structure of the code
 
 
-![alt text](https://raw.githubusercontent.com/louisv123/COLGE/master/utils/structure.png)
-
 ### main.py
 
 `main.py` allows to define arguments and launch the code.
-
-Arguments : 
-
-- `--environment_name`, type=str, default='MVC' : environment_name is the kind of optimization problem. It must be `MVC` for Minimum Vertex Cover problem or `MAXCUT` for Maximum Cut Set problem.
-    
-- `--agent`, type=str,  default='Agent' : Define the name of the agent.
-
-- `--graph_type`, type=str, default='erdos_renyi' : define the kind of degree distribution of graphs. It must be among `erdos_renyi`, `powerlaw`, `barabasi_albert` or `gnp_random_graph`.
-
-- `--graph_nbr`, type=int, default='1000', : number of different graph to generate in training sample.
-
-- `--model`, type=str, default='GCN_QN_1', model name for Q-function. It must be either `S2V_QN_1` for structure2vec algorithm or `GCN_QN_1` for graph_convolunional network algortihm.
-
-- `--ngames`, type=int, default='500': number of games to simulate per epochs (each game is played 5 times).
-
-- `--niter`, type=int, default='1000', max number of iterations per game if the algorithm doesn't reach the terminal step.
-
-- `--epoch`, type=int, default=25, number of epochs.
-
-- `--lr`,type=float, default=1e-4, learning rate.
-
-- `--bs`,type=int,default=32, minibatch size for training.
-
-- `--n_step` ,type=int, default=3, n step in RL.
-
-- `--node`, type=int, default=20, number of node in generated graphs
-
-- `--p`,default=0.14, p, parameter in graph degree distribution (see networkx help).
-
-- `--m`, default=4,m, parameter in graph degree distribution, (see networkx help).
-
-- `--batch`, type=int, default=None, batch run several agent at the same time.
 
 ### graph.py
 
@@ -71,16 +32,33 @@ This script calls each step of reinforcement learning part in a loop (epochs + g
 ### agent.py
 
 Define the agent object and methods needed in deep Q-learning algorithm.
-There are a lot of paramters quite important defined in this part. The discount factor for exploration strategy, the T iterations for structure2vec, ....
 
 ### model.py
 
-Define the Q-function and the embedding algorithm. `S2V_QN_1` and `GCN_QN_1` gives good results.
+Define the Q-function and the embedding algorithm.
 
 ### environment.py
 
-Define the environment object which is either MVC (Minimum vertex cover) or MAXCUT (Maximum cut set).
-It contains as well the method to get the approximation solution and the optimal solution (with pulp)
+Define the environment object for the BSSrp.
+
+### baselines/
+
+Folder containing the exact MILP formulation of the BSSrp and a nearest neighbour heuristic.
+
+### notebooks/
+
+Folder containing the evaluation scripts.
+
+## Acknowledgements
+
+- The repo in which we built our implementation on https://github.com/louisv123/COLGE
+- The repo in which COLGE is based on https://github.com/Hanjun-Dai/graph_comb_opt
+
+
+
+
+
+
 
   
 
