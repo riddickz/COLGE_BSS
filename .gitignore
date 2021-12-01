@@ -24,3 +24,7 @@ __pycache__/
 logs/
 /check.py
 tmp/
+*.pt
+*.pdf
+*.pkl
+*.pickle
