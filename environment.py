@@ -25,25 +25,26 @@ class Environment:
         self.dynamic = self.graph.dynamic.detach().clone()
         self.dynamic_init = self.dynamic.detach().clone()
         self.static = self.graph.static.detach()
+        self.emb = self.graph.emb.detach()
         self.state = self.compute_state(0)
         self.prev_node = 0
         self.t_total = 0.
         self.tour_indices = [0]
         self.prev_demand = np.abs(self.dynamic[2, 1:]).sum()
-        self.trip_count = 0
         self.mask = self.mask_reset()
 
         # 
         self.dynamic[1][0] = self.graph.num_start
-
+        self.dynamic[7, :] = 1 / self.graph.num_vehicles
         if self.penalty_unvisited is None:
             self.penalty_unvisited = self.graph.penalty_cost_demand
 
         self.ep_reward_tour = 0
         self.ep_reward_demand = 0 
         self.ep_reward_overage = 0
+        self.ep_reward_car = 0
 
-        return self.state, self.graph.W, self.mask
+        return self.state, self.graph.W_weighted, self.mask
 
     def mask_reset(self):
         """ Reset mask, exclude only depot node at the init. """
@@ -53,8 +54,9 @@ class Environment:
 
     def compute_state(self,chosen_idx):
         """ Combine graph dynamic feature and static coordinate location. """
-        node_dist = torch.tensor(self.graph.W_full[chosen_idx]).unsqueeze(0).float() # dist to neighbor
-        state = torch.cat((self.dynamic, node_dist), dim=0)
+        node_dist = torch.tensor(self.graph.W_full[chosen_idx]/self.graph.W_full[chosen_idx].max()).unsqueeze(0).float() # dist to neighbor, normalized
+        state = torch.cat((self.dynamic, self.static.T/self.graph.area, self.emb.T), dim=0)
+        # state = torch.cat((self.dynamic, node_dist,self.emb.T), dim=0)
 
         # state = torch.cat((self.dynamic,self.static.T),dim=0)
         return state.float()
@@ -69,7 +71,8 @@ class Environment:
 
     def update_dynamic(self, chosen_idx, prev_idx, new_load, new_demand):
         # Updates the dynamic(observation, load, demand)
-        self.dynamic[0, chosen_idx] = 1
+        if not chosen_idx == 0:
+            self.dynamic[0, chosen_idx] = 1
         self.dynamic[1, chosen_idx] = new_load
         self.dynamic[2, chosen_idx] = new_demand
         self.dynamic[3, :] = 0  # current node
@@ -80,10 +83,11 @@ class Environment:
         if self.prev_node == 0:
             self.dynamic[6, :] = 0 # trip overage reset
         else:
-            self.dynamic[6, chosen_idx] = self.get_overage_time(chosen_idx)
+            self.dynamic[6, chosen_idx] = self.get_overage_time(chosen_idx)/self.graph.time_limit # normalized trip overtime
 
         if chosen_idx == 0: # return to depot
             self.dynamic[5, :] = 0 # zero trip time
+            self.dynamic[7, :] += 1/self.graph.num_vehicles # normalized car overage
         else:
             self.dynamic[5, chosen_idx] = self.get_travel_dist(prev_idx, chosen_idx)
 
@@ -94,7 +98,6 @@ class Environment:
         if chosen_idx == 0: # reset load and demand to zero per formulation
             new_load = self.graph.num_start
             new_demand = 0
-            self.trip_count += 1
         else:
             new_load, new_demand = self.get_updated_load_and_demand(chosen_idx)
 
@@ -108,11 +111,11 @@ class Environment:
 
 
         # demand_met = bool(np.abs(self.dynamic[2]).sum() == 0 )
-        all_node_visit = bool((self.dynamic[0] != 0).all())
-        #all_car_used =  bool(self.trip_count == self.graph.num_vehicles)
+        all_node_visit = bool((self.dynamic[0][1:] == 1).all())
+        # all_car_used =  bool(self.dynamic[7][0] == self.graph.num_vehicles)
 
         # terminal case
-        #if all_node_visit or all_car_used:
+        # if all_node_visit or all_car_used:
         if all_node_visit:
             reward += self.get_terminal_reward(chosen_idx, new_load)
 
@@ -139,7 +142,6 @@ class Environment:
         # uncovered_nodes = (state[2][:] != 0).int()
 
         cur_load = state[1][last_node]
-
         if cur_load ==0:
             underload = state[2].lt(0)
         else:
@@ -149,28 +151,38 @@ class Environment:
             overload = state[2].gt(0)
         else:
             overload =torch.zeros_like(state[2], dtype=torch.bool)
+        # overload = state[2].gt(20 - cur_load)
+        # underload = state[2].lt(0) * state[2].abs().gt(cur_load)
+        # overtime = self.get_next_route_time(chosen_idx) > self.graph.time_limit
 
-        mask = nbr_nodes * uncovered_nodes * ~underload * ~overload
+        mask = uncovered_nodes *  ~underload * ~overload # * nbr_nodes * ~overtime
         mask[0] = 1  # depot is always available unless last visit
         mask[last_node] = 0
         mask[chosen_idx] = 0  # mask out visited node
 
-        mask2 = uncovered_nodes * ~underload *~overload # mask2 without neighbor node restriction
-        mask2[0] = 1  # depot is always available unless last visit
-        mask2[last_node] = 0
-        mask2[chosen_idx] = 0  # mask out visited node
+        # mask2 = uncovered_nodes * ~underload *~overload # mask2 without neighbor node restriction
+        # mask2[0] = 1  # depot is always available unless last visit
+        # mask2[last_node] = 0
+        # mask2[chosen_idx] = 0  # mask out visited node
 
-        if (visited_nodes == 1).all() or (mask2[:] == 0).all():
+
+        if (visited_nodes == 1).all() or (mask[:] == 0).all():
             # all nodes are visited or no node to go, then go back to depot
             mask[:] = 0
             mask[0] = 1
 
-        elif (mask[1:] == 0).all():
-            # when no neighbor node in the graph to go
-            mask = mask2
+        #
+        # if (visited_nodes == 1).all() or (mask2[:] == 0).all():
+        #     # all nodes are visited or no node to go, then go back to depot
+        #     mask[:] = 0
+        #     mask[0] = 1
 
-        else:
-            pass
+        # elif (mask[1:] == 0).all():
+        #     # when no neighbor node in the graph to go
+        #     mask = mask2
+        #
+        # else:
+        #     pass
 
         self.mask = mask.unsqueeze(0)
         return self.mask
@@ -184,11 +196,17 @@ class Environment:
         reward_tour = self.get_travel_dist(chosen_idx, 0) # time to go back to depot
         reward_demand = excess_load * self.graph.penalty_cost_demand # additional bikes on vehicle
         reward_overage = self.get_overage_last_step(chosen_idx)  * self.graph.penalty_cost_time # overtime
-        reward = reward_tour + reward_demand + reward_overage
-        
+
+        # if self.dynamic[7][0] > 1:
+        #     reward_car = (self.dynamic[7][0] - 1) * self.graph.num_vehicles * 10
+        # else:
+        #     reward_car = 0
+
+        reward = reward_tour + reward_demand + reward_overage #+ reward_car
         self.ep_reward_tour -= reward_tour
         self.ep_reward_demand -= reward_demand
         self.ep_reward_overage -= reward_overage
+        # self.ep_reward_car -= reward_car
         
         assert(self._get_demand_unvisited()  == 0) # done for now to ensure all nodes are visited at termination.
 
@@ -199,11 +217,19 @@ class Environment:
         reward_tour = self.get_travel_dist(self.prev_node, chosen_idx) # travel time from prev node to next node
         reward_demand = self.get_demand_reward(chosen_idx) * self.graph.penalty_cost_demand # difference in unmet demand
         reward_overage = self.get_overage_time(chosen_idx) * self.graph.penalty_cost_time # overtime
-        reward = reward_tour + reward_demand + reward_overage
+        # reward = reward_tour + reward_demand + reward_overage
+
+        # if self.dynamic[7][0] > 1:
+        #     reward_car = (self.dynamic[7][0] - 1) * self.graph.num_vehicles * 10
+        # else:
+        #     reward_car = 0
+
+        reward = reward_tour + reward_demand + reward_overage #+ reward_car
 
         self.ep_reward_tour -= reward_tour
         self.ep_reward_demand -= reward_demand
         self.ep_reward_overage -= reward_overage
+        # self.ep_reward_car -= reward_car
 
         return torch.tensor([-reward]) / self.reward_scale
 
@@ -236,6 +262,16 @@ class Environment:
     def get_current_route_time(self):
         """ Gets the current route time. """
         return self.dynamic[5].sum().item()
+
+    def get_next_route_time(self, chosen_idx):
+        """ Gets all the next routes time. """
+        cur_time = self.dynamic[5].sum().item()
+        # next_time = self.graph.W_weighted[chosen_idx]+ self.graph.W_weighted[chosen_idx][0]
+        # next_time[0] = self.graph.W_weighted[chosen_idx][0] # avoid double count depot
+        adj = torch.tensor(self.graph.W_weighted.clone().detach())
+        # next_time = adj[chosen_idx]+ adj[:][0] # cur node to other nodes + other nodes to depot
+        next_time = adj[chosen_idx]
+        return cur_time + next_time
 
     def get_updated_load_and_demand(self, chosen_idx):
         """ Gets the updated load and demands. """
@@ -330,19 +366,25 @@ class Environment:
 
         # Show dynamic
         for i, (x, y) in enumerate(zip(xs, ys)):
-            label = "#{}: {} ->{}".format(i,self.dynamic_init[2][i].int(),self.dynamic[2][i].int())
+            label = "N{}: {}/{}".format(i,self.dynamic_init[2][i].int(),self.dynamic[2][i].int())
             plt.annotate(label,  # this is the text
                          (x, y),  # these are the coordinates to position the label
                          textcoords="offset points",  # how to position the text
                          xytext=(0, 5),  # distance from text to points (x,y)
                          ha='center',
-                         fontsize=5,
-                         color="orange")
+                         fontsize=10,
+                         color="darkorange")
 
         plt.xlabel('X')
         plt.ylabel('Y')
-        reward = (self.ep_reward_tour + self.ep_reward_demand + self.ep_reward_overage).item()
-        plt.title("Game {} Reward: {}".format(self.games,round(reward, 3)))
+        reward = (self.ep_reward_tour + self.ep_reward_demand + self.ep_reward_overage + self.ep_reward_car).item()
+        plt_name = "Game {}, Total Reward: {:.1f} \n " \
+                   "Tour: {:.1f}, Demand: {:.1f}, Overage: {:.1f}, Car: {:.1f}\n ".format(self.games, reward,
+                                                                 self.ep_reward_tour,
+                                                                 self.ep_reward_demand,
+                                                                 self.ep_reward_overage,
+                                                                self.ep_reward_car)
+        plt.title(plt_name)
 
         if save_path is None:
            save_path = 'rl_results/render_{}.pdf'.format(timestamp())

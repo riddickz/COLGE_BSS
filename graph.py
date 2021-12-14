@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import os
 import torch
 from scipy import sparse
+import scipy.stats as stats
+from mat_fact import  compute_pmi_inf, compute_log_ramp, compute_mat_embed
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
@@ -54,14 +56,24 @@ class Graph:
         self.rng.seed(_seed)
 
     def gen_instance(self):  # Generate random instance
-
+        # self.rng.seed(0)
         self.locations = self.rng.rand(self.num_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
-        # pca = PCA(n_components=2)  # center & rotate coordinates
-        # locations = pca.fit_transform(coords)
+        pca = PCA(n_components=2)  # center & rotate coordinates
+        self.locations[0] = [0.5 * self.area , 0.5 * self.area]  # force depot to be at center
+        self.locations = pca.fit_transform(self.locations)
         self.refresh_demand()
+
+    def get_norm_demand(self):
+        x = np.arange(-self.max_demand, self.max_demand+1)
+        xU, xL = x + 0.5, x - 0.5
+        prob = stats.norm.cdf(xU, scale=3) - stats.norm.cdf(xL, scale=3)
+        prob = prob / prob.sum()
+        demand = np.random.choice(x, size=self.num_nodes, p=prob)
+        return  demand
 
     def refresh_demand(self):
         self.demands = self.get_demands()
+        # self.demands = self.get_norm_demand()
         demands_tensor = torch.tensor(self.demands)
         cur_node = torch.zeros(self.num_nodes)
         prev_node = torch.zeros(self.num_nodes)
@@ -74,7 +86,8 @@ class Graph:
 
         self.static = torch.tensor(self.locations)
         self.observation = torch.zeros(self.num_nodes)
-        self.dynamic = torch.stack((self.observation, loads, demands_tensor, cur_node, prev_node,trip_time,trip_overage),
+        car_count = torch.zeros(self.num_nodes)
+        self.dynamic = torch.stack((self.observation, loads, demands_tensor, cur_node, prev_node,trip_time,trip_overage,car_count),
                                    dim=0)
 
 
@@ -103,13 +116,23 @@ class Graph:
         W_val *= W
         return W.astype(int), W_val
 
+    def node_emb(self,adj):
+        pmi_inf = compute_pmi_inf(adj)
+        pmi_inf_trans = compute_log_ramp(pmi_inf, T = 3)
+        adj = compute_mat_embed(pmi_inf_trans, dims = 4)
+        return adj
+
     def get_time_based_distance_matrix(self, W):
         return (W / self.speed) * 60
 
     def bss_graph_gen(self):
         self.gen_instance()
         self.W, self.W_val = self.adjacenct_gen(self.num_nodes, self.num_neighbors, self.static)
-        self.W_weighted = torch.tensor(np.multiply(self.W_val, self.W))
+        while np.any(self.W_val[0]>=30):
+            self.W, self.W_val = self.adjacenct_gen(self.num_nodes, self.num_neighbors, self.static)
+        self.W_weighted = np.multiply(self.W_val, self.W)
+        self.emb = torch.tensor(self.node_emb(self.W_weighted))
+        self.W_weighted = torch.tensor(self.W_weighted)
         self.W = torch.tensor(self.W)
         self.A = sparse.csr_matrix(self.W_weighted)
         self.g = nx.from_numpy_matrix(np.matrix(self.W), create_using=nx.Graph)
@@ -190,8 +213,8 @@ def test():
         speed=30,
         time_limit=120)
     nx.draw(g.g, with_labels=True)
-    edge_index, edge_weight = g.get_edge()
-    print(edge_index)
+    plt.show()
+
 
 
 if __name__ == "__main__":

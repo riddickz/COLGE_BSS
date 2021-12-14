@@ -30,3 +30,6 @@ tmp/
 *.pickle
 *.jpg
 runs/
+/trained_models/
+/rl_results/
+/evaluation_results/
