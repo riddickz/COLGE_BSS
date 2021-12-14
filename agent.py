@@ -5,9 +5,11 @@ import logging
 import models
 from utils.config import load_model_config
 import torch
-from collections import namedtuple, deque
 import copy
 from utils.vis import plot_grad_flow,count_parameters,timestamp
+from replay_buffer import ReplayMemory, ReplayBuffer
+from labml_helpers.schedule import Piecewise
+from torch.optim import lr_scheduler
 
 # Set up logger
 logging.basicConfig(
@@ -20,51 +22,27 @@ Contains the definition of the agent that will run in an
 environment.
 """
 
-Transition = namedtuple('Transition',
-                        ('state', 'action', 'reward', 'next_state', 'adj', 'mask'))
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = torch.device("cpu")
-
-class ReplayMemory(object):
-
-    def __init__(self, capacity):
-        self.memory = deque([], maxlen=capacity)
-
-    def push(self, *args):
-        self.memory.append(Transition(*args))
-
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
-
-    def sample_list(self, size):
-        x = []
-        for _ in range(size):
-            i = random.randrange(len(self.memory) - 5)
-            x.append(self.memory[i])
-        return x
-
-    def __len__(self):
-        return len(self.memory)
 
 class DQAgent:
 
     def __init__(self, model, lr,bs, replace_freq):
         self.model_name = model
-        self.gamma = .9  # 0.99
-        self.epsilon_ = 0.8 #eps
-        self.epsilon_min = 0.05
-        self.discount_factor = 0.9991
-        self.neg_inf = -1000
+        self.gamma = .99  # 0.99
+        self.epsilon_ = 0.95 #eps
+        self.epsilon_min = 0.01 #0.05
+        self.discount_factor = 0.99995
+        self.neg_inf = -100000
 
         self.target_net_replace_freq = replace_freq  # How frequently target netowrk updates
-        self.mem_capacity = 20000 # capacity of experience replay buffer
+        # self.mem_capacity = 30000 # capacity of experience replay buffer ,100000
+        self.mem_capacity = 2 ** 15 #  must be a power of 2.
         self.batch_size = bs  # batch size of sampling process from buffer
 
         # elif self.model_name == 'GCN_Naive':
         #      self.policy_net = models.GCN_Naive(c_in=8, c_out=1, c_hidden=8)
-
-        self.policy_net = models.GATv2(in_features=8, n_hidden=64, n_classes=1, n_heads=1,dropout=0.0, share_weights=False).to(device)
+        self.policy_net = models.GATv2(in_features=14, n_hidden=64, n_classes=1, n_node=10 , n_heads=1, dropout=0.0, share_weights=False).to(device)
         self.target_net = copy.deepcopy(self.policy_net).to(device)
 
         # Define counter, memory size and loss function
@@ -72,10 +50,22 @@ class DQAgent:
         self.memory_counter = 0  # counter used for experience replay buffer
 
         # # ----Define the memory (or the buffer), allocate some space to it. The number
-        self.memory = ReplayMemory(self.mem_capacity)
+        # self.memory = ReplayMemory(self.mem_capacity)
+        # β for replay buffer as a function of updates
+        self.prioritized_replay_beta = Piecewise(
+            [
+                (0, 0.),
+                (5*4000, 1)
+            ], outside_value=1)
+        self.prioritized_replay_alpha = 0.6 #0.5
+        # Replay buffer with α=0.6. Capacity of the replay buffer must be a power of 2.
+        self.replay_buffer = ReplayBuffer(self.mem_capacity, self.prioritized_replay_alpha)
+
         # ------- Define the optimizer------#
         # self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay= 0.01)
+        # self.optimizer = torch.optim.SGD(self.policy_net.parameters(), lr=lr, momentum= 0.9, weight_decay= 0.01)
         self.optimizer = torch.optim.SGD(self.policy_net.parameters(), lr=lr, momentum= 0.9, weight_decay= 0.01)
+        self.scheduler = lr_scheduler.ExponentialLR(self.optimizer, gamma=0.999)
 
         # ------Define the loss function-----#
         self.criterion = torch.nn.SmoothL1Loss()
@@ -85,15 +75,13 @@ class DQAgent:
         if self.epsilon_ > pr:
             mask = mask.detach().cpu().numpy()
             action = torch.tensor([np.random.choice(np.where(mask[0] == 1)[0])]) # randomly choose any unvisited node + depot
-                # action = torch.tensor([0])  # return to depot
         else:
-            q_a = self.policy_net(state.T.unsqueeze(0), adj.unsqueeze(0), mask).detach().clone().to(device)
+            q_a = self.policy_net(state.T.unsqueeze(0), adj.unsqueeze(0), mask=None).detach().clone().to(device)
             action = torch.argmax(q_a[0,:,0] + (1 - mask) * self.neg_inf).reshape(1)
         return action.to(device)
 
-    def learn(self):
-        # Define how the whole DQN works including sampling batch of experiences,
-        # when and how to update parameters of target network
+    def learn(self,iter_count):
+        # sampling batch of experiences, update parameters of target network
 
         # update the target network every fixed steps
         if self.learn_step_counter % self.target_net_replace_freq == 0:
@@ -102,37 +90,40 @@ class DQAgent:
         self.learn_step_counter += 1
 
         # Determine the Sampled batch from buffer
-        transitions = self.memory.sample(self.batch_size)
-        batch = Transition(*zip(*transitions))
+        # transitions = self.memory.sample(self.batch_size)
+        # batch = Transition(*zip(*transitions))
+        beta = self.prioritized_replay_beta(iter_count)
+        transitions = self.replay_buffer.sample(self.batch_size, beta=beta)
 
-        # Compute a mask of non-final states and concatenate the batch elements
-        b_s = torch.stack(batch.state).permute(0,2,1).float() # torch.Size([1, 10, 6])
-        b_a = torch.stack(batch.action)
-        b_r = torch.stack(batch.reward)
-        b_s_ = torch.stack(batch.next_state).permute(0,2,1).float().to(device)
-        b_adj = torch.stack(batch.adj).float().to(device)
-        b_mask = torch.cat(batch.mask)
-
-        # non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-        #                                         b_s_)), device=device, dtype=torch.bool)
-        #
-        # non_final_next_states = torch.stack([s for s in b_s_
-        #                                    if s is not None])
+        b_s =torch.tensor(transitions["obs"]).permute(0,2,1).float().to(device) # torch.Size([1, 10, 6])
+        b_a = torch.tensor(transitions['action']).reshape(self.batch_size,1)
+        b_r = torch.tensor(transitions['reward']).reshape(self.batch_size,1)
+        b_s_ = torch.tensor(transitions['next_obs']).permute(0,2,1).float().to(device)
+        b_adj = torch.tensor(transitions['adj']).float().to(device)
 
         # calculate the Q value of state-action pair
-        a_idx = b_a.unsqueeze(1).repeat(1, b_adj.shape[1], 1)
-        q_eval = self.policy_net(b_s,b_adj,b_mask).gather(1, a_idx)[:, 0, :]
+        a_idx = b_a.unsqueeze(-1)
+        q_eval = self.policy_net(b_s,b_adj,mask = None).gather(1, a_idx)
 
-        # calculate the q value of next state
-        # q_next = torch.zeros(b_s_.size(0),b_s_.size(1),1, device=device)
-        # q_next[non_final_mask]  = self.target_net(non_final_next_states,b_adj).detach()  # detach from computational graph, don't back propagate
-        q_next = self.target_net(b_s_,b_adj,b_mask).detach().to(device)  # detach from computational graph, don't back propagate
+        # double-DQN
+        with torch.no_grad():
+            # select the maximum q value
+            best_a = self.policy_net(b_s, b_adj, mask = None).argmax(1).unsqueeze(-1)
+            best_q_next = self.target_net(b_s_, b_adj, mask = None).gather(1, best_a).to(device)
 
-        # select the maximum q value
-        b_r = torch.clamp(b_r, min=-1, max=1).to(device)
-        q_target = (b_r.reshape(-1,1) + self.gamma * q_next.max(1)[0]).float().to(device)  # (batch_size, 1)
+            b_r = torch.clamp(b_r, min=-1, max=1).to(device) # reward clipped within [−1, 1] for stability
+            q_target = (b_r.unsqueeze(-1) + self.gamma * best_q_next).float().to(device)  # (batch_size, 1)
+            td_errors = q_eval - q_target
 
         loss = self.criterion(q_eval, q_target)
+        loss = torch.clamp(loss, min=-1, max=1) # TD error clipped within [−1, 1] for stability
+
+        # Calculate priorities for replay buffer
+        new_priorities = np.abs(td_errors.cpu().numpy()) + 1e-6
+
+        # Update replay buffer priorities
+        self.replay_buffer.update_priorities(transitions['indexes'], new_priorities)
+
         if loss > 0.01:
             print("WARNING: HIGH LOSS" )
             print(loss)
@@ -142,8 +133,8 @@ class DQAgent:
         loss.backward(retain_graph=True)
 
         # torch.nn.utils.clip_grad.clip_grad_norm_(self.policy_net.parameters(), 10)
-        for param in self.policy_net.parameters():
-            param.grad.data.clamp_(-1, 1)
+        # for param in self.policy_net.parameters():
+        #     param.grad.data.clamp_(-1, 1)
 
         self.optimizer.step()  # execute back propagation for one step
 

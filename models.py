@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from labml_helpers.module import Module
 import os
+import torch.nn.functional as f
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
@@ -38,8 +39,8 @@ class GATv2(Module):
     ## Graph Attention Network v2 (GATv2)
     """
 
-    def __init__(self, in_features: int, n_hidden: int, n_classes: int, n_heads: int, dropout: float,
-                 share_weights: bool = True):
+    def __init__(self, in_features: int, n_hidden: int, n_classes: int, n_node: int, n_heads: int, dropout: float,
+                 share_weights: bool = True, residual: bool = True):
         """
         * `in_features` is the number of features per node
         * `n_hidden` is the number of features in the first graph attention layer
@@ -49,56 +50,75 @@ class GATv2(Module):
         * `share_weights` if set to True, the same matrix will be applied to the source and the target node of every edge
         """
         super().__init__()
+        self.in_features = in_features
+        self.n_hidden = n_hidden
+        self.n_classes = n_classes
+        self.n_node = n_node
+        self.n_heads = n_heads
+        self.share_weights = share_weights
+        self.residual = residual
 
-        # First graph attention layer where we concatenate the heads
-        self.gat_layer1 = GraphAttentionV2Layer(in_features, n_hidden, n_heads,
-                                                is_concat=False, dropout=dropout, share_weights=share_weights)
 
-        self.gat_layer = GraphAttentionV2Layer(n_hidden, n_hidden, n_heads,
-                                                is_concat=False, dropout=dropout, share_weights=share_weights)
+        self.linear = nn.Linear(in_features=self.in_features, out_features= self.n_hidden, bias=True)
 
+        self.gat_layer = GraphAttentionV2Layer(self.n_hidden, self.n_hidden, self.n_heads,
+                                                is_concat=False, dropout=dropout, share_weights=self.share_weights)
+        self.gat_layer2 = GraphAttentionV2Layer(2*self.n_hidden, self.n_hidden, self.n_heads,
+                                                is_concat=False, dropout=dropout, share_weights=self.share_weights)
 
-
-        # # Final graph attention layer where we average the heads
-        # self.gat_output = GraphAttentionV2Layer(n_hidden, n_classes, n_classes,
-        #                                         is_concat=False, dropout=dropout, share_weights=share_weights)
-
-        # self.linear1 = nn.Linear(n_hidden, n_hidden, bias=True)
-        # self.linear2 = nn.Linear(n_hidden, n_classes, bias=True)
-
-        self.activation = nn.ELU()
+        self.linear2 = nn.Linear(in_features=2*self.n_hidden, out_features=2*self.n_hidden, bias=True)
 
         self.dropout = nn.Dropout(dropout)
 
-        self.linear_layers = nn.Sequential(
-            nn.Linear(in_features=n_hidden+4, out_features= n_hidden),
+        # self.layer_norm1_h = nn.LayerNorm(self.n_hidden)
+        # self.layer_norm2_h = nn.LayerNorm(self.n_hidden*2)
+        self.batch_norm1_h = nn.BatchNorm1d(self.n_node)
+
+        # self.act_elu = nn.ELU()
+        self.act_tahn = nn.Tanh()
+
+        self.MLP = nn.Sequential(
+            nn.Linear(in_features=3*self.n_hidden, out_features= 2*self.n_hidden, bias=True),
             nn.ReLU(),
-            nn.Linear(in_features=n_hidden, out_features=n_hidden),
+            nn.Linear(in_features=2*self.n_hidden, out_features=self.n_hidden, bias=True),
             nn.ReLU(),
-            nn.Linear(in_features=n_hidden, out_features=n_classes),
+            nn.Linear(in_features=self.n_hidden, out_features=n_classes,bias=True),
         )
 
-    def forward(self, x: torch.Tensor, adj_mat: torch.Tensor, mask):
-        x = x.to(device)
-        residual = torch.cat((x[:,:,1:3], x[:,:,6:8]), dim=2)
-        # 1. Obtain node embeddings
-        h = self.activation(self.gat_layer1(x, adj_mat,mask))
-        # h = self.dropout(h)
+        self.softmax = nn.Softmax(dim=n_classes)
 
-        h = self.gat_layer(h, adj_mat,mask=None)
-        h = self.activation(h)
 
-        h = self.gat_layer(h, adj_mat,mask=None)
+    def forward(self, x: torch.Tensor, adj_mat: torch.Tensor, mask=None):
+        # x[:,:,1] =x[:,:,1]/20
+        # x[:,:,2] =x[:,:,2]/10
+        # x[:,:,5] =x[:,:,5]/35
+        # x[:,:,6] =x[:,:,6]/35
+        # x[:,:,7] =x[:,:,7]/(10/30)
+        # x = torch.cat((x[:,:,1:3], x[:,:,5:]), dim=2)
+        # h_in = torch.cat((x[:,:,1:3], x[:,:,6:]), dim=2)  # for first residual connection
+        # residual = torch.cat((x[:,:,1:3], x[:,:,6:8]), dim=2)
 
-        # # 2. Readout layer
-        # x_graph = torch.mean(x_node, 1).unsqueeze(1).repeat(1,x_node.size(1),1) # global mean pool # TODO check graph embed
+        h_in = self.linear(x)
+        # 1.[START] GAT -----------------------------------------------------------------
+        out1 = self.gat_layer(h_in, adj_mat)
+        out1 = self.act_tahn(out1)
+        out1 = torch.cat((out1, h_in), dim=2)
+        out1 = self.batch_norm1_h(out1)
+        out1 = self.linear2(out1)
+        out1 = self.act_tahn(out1)
 
-        # # 3. Apply final projection
-        # out = torch.cat((x_node, x_graph),dim=2)
-        h = torch.cat((h, residual), dim=2)
+        out2 = self.gat_layer2(out1, adj_mat)
+        out2 = self.act_tahn(out2)
+        out2 = torch.cat((out2, out1), dim=2)
+        out2 = self.batch_norm1_h(out2)
 
-        # Linear layer
-        q = self.linear_layers(h)
+        # 1.[END] GAT -----------------------------------------------------------------
+
+        # 2.[START] MLP -----------------------------------------------------------------
+        q = self.MLP(out2)
+        q = self.softmax(q)
+        # 2.[END] MLP -----------------------------------------------------------------
+
         return q
 
 
@@ -111,39 +131,44 @@ class GraphAttentionV2Layer(Module):
                  share_weights: bool = False):
 
         super().__init__()
-
-        self.is_concat = is_concat
+        self.in_features = in_features
+        self.out_features = out_features
         self.n_heads = n_heads
+        # self.adaptive_edge_PE = adaptive_edge_PE
+        self.is_concat = is_concat
+        self.dropout = dropout
+        self.leaky_relu_negative_slope = leaky_relu_negative_slope
         self.share_weights = share_weights
 
+
         # Calculate the number of dimensions per head
-        if is_concat:
-            assert out_features % n_heads == 0
-            self.n_hidden = out_features // n_heads
+        if self.is_concat:
+            assert self.out_features  % self.n_heads == 0
+            self.n_hidden = self.out_features  // self.n_heads
         else:
-            self.n_hidden = out_features
+            self.n_hidden = self.out_features
 
         # Linear layer for initial source transformation;
-        self.linear_l = nn.Linear(in_features, self.n_hidden * n_heads, bias=False)
+        self.linear_l = nn.Linear(self.in_features, self.n_hidden * self.n_heads, bias=False)
 
-        if share_weights:
+        if self.share_weights:
             self.linear_r = self.linear_l
         else:
-            self.linear_r = nn.Linear(in_features, self.n_hidden * n_heads, bias=False)
+            self.linear_r = nn.Linear(self.in_features, self.n_hidden * self.n_heads, bias=False)
 
-        # Linear layer to compute attention score $e_{ij}$
+        # Linear layer to compute attention score e_ij
         self.attn = nn.Linear(self.n_hidden, 1, bias=False)
 
-        # The activation for attention score $e_{ij}$
-        self.activation = nn.LeakyReLU(negative_slope=leaky_relu_negative_slope)
-
-        # Softmax to compute attention $\alpha_{ij}$
+        # The activation for attention score e_ij
+        self.activation = nn.Tanh() #nn.LeakyReLU(negative_slope=self.leaky_relu_negative_slope)
+        self.lin10 = nn.Linear(100, 100, bias=False)
+        # Softmax to compute attention alpha_ij
         self.softmax = nn.Softmax(dim=2)
 
         # Dropout layer to be applied for attention
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(self.dropout )
 
-    def forward(self, h: torch.Tensor, adj_mat: torch.Tensor, mask):
+    def forward(self, h: torch.Tensor, adj_mat: torch.Tensor, mask=None):
 
         # Number of nodes
         batch_size = h.shape[0]
@@ -169,16 +194,38 @@ class GraphAttentionV2Layer(Module):
 
         # Mask $e_ij$ based on adjacency matrix.
         e_flat = torch.flatten(e, start_dim=1)
-        adj_mat_flat = torch.flatten(adj_mat.unsqueeze(-1).repeat(1,1,1,self.n_heads), start_dim=1).to(device)
-        e_flat = e_flat.masked_fill(adj_mat_flat == 0, float('-inf'))
+
+        # fill node self edge and normalize
+        d = torch.min(adj_mat.masked_fill(adj_mat == 0, float('inf')), dim=2)[0]/2
+        adj = adj_mat + torch.diag_embed(d)
+        adj_norm = f.normalize(adj.float(),p=2,dim=2)
+
+        # flatten adj and invert dist
+        adj_flat = torch.flatten(adj_norm.unsqueeze(-1).repeat(1,1,1,self.n_heads), start_dim=1).to(device)
+        # e_flat = e_flat.masked_fill(adj_mat_flat == 0, float('-inf'))
+        adj_flat_inv = torch.pow(adj_flat, -1)
+
+        # attention weighed by edge weight
+        mask_no_edge = torch.ones_like(adj_flat_inv)
+        mask_no_edge[adj_flat_inv == float('inf')] = float('0')
+
+        adj_flat_inv[adj_flat_inv == float('inf')] = float('0')
+        edge_att = self.activation(self.lin10(adj_flat_inv)) * mask_no_edge
+
+        e_flat = e_flat * edge_att
+        e_flat = e_flat.masked_fill(e_flat == 0, float('-10000'))
         e = e_flat.unflatten(1, (n_nodes, n_nodes,self.n_heads))
+        #
+        # if mask is not None:
+        #     mask1 = (mask).unsqueeze(2).unsqueeze(3).repeat(1, 1, e.size(2), e.size(3)).to(device)
+        #     # mask1 = torch.eq(mask1, mask1.permute(0,2,1,3))
+        #     mask2 = 1 - mask1 *mask1.permute(0,2,1,3)
+        #     e_ = e.masked_fill_((mask2), float('-10000'))
+        #
+        # else:
+        #     e_ = e
 
         e_ = e
-        if mask is not None:
-            mask = (1- mask).unsqueeze(2).unsqueeze(3).repeat(1, 1, e.size(2), e.size(3)).to(device)
-            mask = torch.eq(mask, mask.permute(0,2,1,3))
-            mask_value = torch.finfo(e.dtype).min
-            e_ = e.masked_fill_((~mask), mask_value)
 
         # We then normalize attention scores (or coefficients)
         a = self.softmax(e_)
@@ -198,8 +245,9 @@ class GraphAttentionV2Layer(Module):
 
 
 def test_GATv2():
-    model = GATv2(in_features=8, n_hidden=8, n_classes=1, n_heads=1, dropout=0.1, share_weights=False)
-    x = torch.rand(2, 20, 8)
+    dim_in = 8+4
+    model = GATv2(in_features=dim_in, n_hidden=dim_in*2, n_classes=1, n_heads=1, dropout=0.1, share_weights=False)
+    x = torch.rand(2, 20, 14)
     a = torch.randint(2, (20, 20))
     a = (a + a.t()).clamp(max=1)
     a = a.unsqueeze(0).repeat(2, 1, 1)
