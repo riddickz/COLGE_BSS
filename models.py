@@ -39,7 +39,7 @@ class GATv2(Module):
     ## Graph Attention Network v2 (GATv2)
     """
 
-    def __init__(self, in_features: int, n_hidden: int, n_classes: int, n_node: int, n_heads: int, dropout: float,
+    def __init__(self, in_features: int, n_hidden: int, n_classes: int, n_nodes: int, n_heads: int, dropout: float,
                  share_weights: bool = True, residual: bool = True):
         """
         * `in_features` is the number of features per node
@@ -53,7 +53,7 @@ class GATv2(Module):
         self.in_features = in_features
         self.n_hidden = n_hidden
         self.n_classes = n_classes
-        self.n_node = n_node
+        self.n_nodes = n_nodes
         self.n_heads = n_heads
         self.share_weights = share_weights
         self.residual = residual
@@ -62,9 +62,11 @@ class GATv2(Module):
         self.linear = nn.Linear(in_features=self.in_features, out_features= self.n_hidden, bias=True)
 
         self.gat_layer = GraphAttentionV2Layer(self.n_hidden, self.n_hidden, self.n_heads,
-                                                is_concat=False, dropout=dropout, share_weights=self.share_weights)
+                                                is_concat=False, dropout=dropout, share_weights=self.share_weights,
+                                                n_nodes=self.n_nodes)
         self.gat_layer2 = GraphAttentionV2Layer(2*self.n_hidden, self.n_hidden, self.n_heads,
-                                                is_concat=False, dropout=dropout, share_weights=self.share_weights)
+                                                is_concat=False, dropout=dropout, share_weights=self.share_weights,
+                                                n_nodes=self.n_nodes)
 
         self.linear2 = nn.Linear(in_features=2*self.n_hidden, out_features=2*self.n_hidden, bias=True)
 
@@ -72,7 +74,7 @@ class GATv2(Module):
 
         # self.layer_norm1_h = nn.LayerNorm(self.n_hidden)
         # self.layer_norm2_h = nn.LayerNorm(self.n_hidden*2)
-        self.batch_norm1_h = nn.BatchNorm1d(self.n_node)
+        self.batch_norm1_h = nn.BatchNorm1d(self.n_nodes)
 
         # self.act_elu = nn.ELU()
         self.act_tahn = nn.Tanh()
@@ -128,13 +130,15 @@ class GraphAttentionV2Layer(Module):
                  is_concat: bool = True,
                  dropout: float = 0.6,
                  leaky_relu_negative_slope: float = 0.2,
-                 share_weights: bool = False):
+                 share_weights: bool = False,
+                 n_nodes:int = 10):
 
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
         self.n_heads = n_heads
         # self.adaptive_edge_PE = adaptive_edge_PE
+        self.n_nodes = n_nodes
         self.is_concat = is_concat
         self.dropout = dropout
         self.leaky_relu_negative_slope = leaky_relu_negative_slope
@@ -161,7 +165,7 @@ class GraphAttentionV2Layer(Module):
 
         # The activation for attention score e_ij
         self.activation = nn.Tanh() #nn.LeakyReLU(negative_slope=self.leaky_relu_negative_slope)
-        self.lin10 = nn.Linear(100, 100, bias=False)
+        self.lin_n_node = nn.Linear(self.n_nodes**2, self.n_nodes**2, bias=False)
         # Softmax to compute attention alpha_ij
         self.softmax = nn.Softmax(dim=2)
 
@@ -210,7 +214,7 @@ class GraphAttentionV2Layer(Module):
         mask_no_edge[adj_flat_inv == float('inf')] = float('0')
 
         adj_flat_inv[adj_flat_inv == float('inf')] = float('0')
-        edge_att = self.activation(self.lin10(adj_flat_inv)) * mask_no_edge
+        edge_att = self.activation(self.lin_n_node(adj_flat_inv)) * mask_no_edge
 
         e_flat = e_flat * edge_att
         e_flat = e_flat.masked_fill(e_flat == 0, float('-10000'))

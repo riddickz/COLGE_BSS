@@ -17,9 +17,9 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 class Graph:
     def __init__(self,
-                 num_nodes,
+                 n_nodes,
                  k_nn,
-                 num_vehicles,
+                 n_vehicles,
                  penalty_cost_demand,
                  penalty_cost_time,
                  speed,
@@ -33,13 +33,13 @@ class Graph:
         if max_load < max_demand:
             raise ValueError(':param max_load: must be > max_demand')
 
-        self.num_nodes = num_nodes
+        self.n_nodes = n_nodes
         self.num_neighbors = k_nn
         self.max_load = max_load
         self.max_demand = max_demand
         self.bike_load_time = bike_load_time
         self.area = area  # km
-        self.num_vehicles = num_vehicles
+        self.n_vehicles = n_vehicles
         self.penalty_cost_demand = penalty_cost_demand
         self.penalty_cost_time = penalty_cost_time
         self.speed = speed
@@ -57,7 +57,7 @@ class Graph:
 
     def gen_instance(self):  # Generate random instance
         # self.rng.seed(0)
-        self.locations = self.rng.rand(self.num_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
+        self.locations = self.rng.rand(self.n_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
         pca = PCA(n_components=2)  # center & rotate coordinates
         self.locations[0] = [0.5 * self.area , 0.5 * self.area]  # force depot to be at center
         self.locations = pca.fit_transform(self.locations)
@@ -68,45 +68,45 @@ class Graph:
         xU, xL = x + 0.5, x - 0.5
         prob = stats.norm.cdf(xU, scale=3) - stats.norm.cdf(xL, scale=3)
         prob = prob / prob.sum()
-        demand = np.random.choice(x, size=self.num_nodes, p=prob)
+        demand = np.random.choice(x, size=self.n_nodes, p=prob)
         return  demand
 
     def refresh_demand(self):
         self.demands = self.get_demands()
         # self.demands = self.get_norm_demand()
         demands_tensor = torch.tensor(self.demands)
-        cur_node = torch.zeros(self.num_nodes)
-        prev_node = torch.zeros(self.num_nodes)
+        cur_node = torch.zeros(self.n_nodes)
+        prev_node = torch.zeros(self.n_nodes)
         cur_node[0] = 1
         prev_node[0] = 1
-        trip_time = torch.zeros(self.num_nodes)
-        trip_overage = torch.zeros(self.num_nodes)
+        trip_time = torch.zeros(self.n_nodes)
+        trip_overage = torch.zeros(self.n_nodes)
 
-        loads = torch.zeros(self.num_nodes)
+        loads = torch.zeros(self.n_nodes)
 
         self.static = torch.tensor(self.locations)
-        self.observation = torch.zeros(self.num_nodes)
-        car_count = torch.zeros(self.num_nodes)
+        self.observation = torch.zeros(self.n_nodes)
+        car_count = torch.zeros(self.n_nodes)
         self.dynamic = torch.stack((self.observation, loads, demands_tensor, cur_node, prev_node,trip_time,trip_overage,car_count),
                                    dim=0)
 
 
-    def adjacenct_gen(self, num_nodes, num_neighbors, coords):
-        assert num_neighbors < num_nodes
+    def adjacenct_gen(self, n_nodes, num_neighbors, coords):
+        assert num_neighbors < n_nodes
 
         # add KNN edges with random K
         W_val = squareform(pdist(coords, metric='euclidean'))
         W_val = self.get_time_based_distance_matrix(W_val)
         self.W_full = W_val.copy()
 
-        W = np.zeros((num_nodes, num_nodes))
+        W = np.zeros((n_nodes, n_nodes))
         knns = np.argpartition(W_val, kth=num_neighbors, axis=-1)[:, num_neighbors::-1]
 
         # depot is fully connected to all the other nodes
         W[0, :] = 1
         W[:, 0] = 1
 
-        for idx in range(num_nodes):
+        for idx in range(n_nodes):
             W[idx][knns[idx]] = 1
             W = W.T
             W[idx][knns[idx]] = 1
@@ -127,9 +127,9 @@ class Graph:
 
     def bss_graph_gen(self):
         self.gen_instance()
-        self.W, self.W_val = self.adjacenct_gen(self.num_nodes, self.num_neighbors, self.static)
+        self.W, self.W_val = self.adjacenct_gen(self.n_nodes, self.num_neighbors, self.static)
         while np.any(self.W_val[0]>=30):
-            self.W, self.W_val = self.adjacenct_gen(self.num_nodes, self.num_neighbors, self.static)
+            self.W, self.W_val = self.adjacenct_gen(self.n_nodes, self.num_neighbors, self.static)
         self.W_weighted = np.multiply(self.W_val, self.W)
         self.emb = torch.tensor(self.node_emb(self.W_weighted))
         self.W_weighted = torch.tensor(self.W_weighted)
@@ -163,8 +163,8 @@ class Graph:
         """ Gets random demand vector that has zero sum. """
 
         # randomly sample demands
-        demands = self.rng.randint(1, self.max_demand, self.num_nodes)
-        demands *= self.rng.choice([-1, 1], self.num_nodes)  # exclude 0
+        demands = self.rng.randint(1, self.max_demand, self.n_nodes)
+        demands *= self.rng.choice([-1, 1], self.n_nodes)  # exclude 0
 
         # zero demand at depot
         demands[0] = 0
@@ -205,7 +205,7 @@ class Graph:
 # Toy Case Test
 def test():
     g = Graph(
-        num_nodes=10,
+        n_nodes=10,
         k_nn=4,
         num_vehicles=3,
         penalty_cost_demand=1,

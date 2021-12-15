@@ -29,12 +29,13 @@ class ReplayMemory(object):
 
 
 class ReplayBuffer:
-    def __init__(self, capacity, alpha):
+    def __init__(self, capacity, alpha, n_nodes, n_features):
         # We use a power of 2 for capacity because it simplifies the code and debugging
         self.capacity = capacity
         self.alpha = alpha
-        self.num_ft = 14
-        self.num_node = 10
+        self.n_nodes = n_nodes
+        self.n_features = n_features
+       
 
         # Maintain segment binary trees to take sum and find minimum over a range
         self.priority_sum = [0 for _ in range(2 * self.capacity)]
@@ -44,11 +45,11 @@ class ReplayBuffer:
         self.max_priority = 1.
 
         self.data = {
-            'obs': np.zeros(shape=(capacity, self.num_ft, self.num_node), dtype=np.float32),
+            'obs': np.zeros(shape=(capacity, self.n_features, self.n_nodes), dtype=np.float32),
             'action': np.zeros(shape=capacity, dtype=np.int64),
             'reward': np.zeros(shape=capacity, dtype=np.float32),
-            'next_obs': np.zeros(shape=(capacity, self.num_ft, self.num_node), dtype=np.float32),
-            'adj': np.zeros(shape=(capacity, self.num_node, self.num_node), dtype=np.float32),
+            'next_obs': np.zeros(shape=(capacity, self.n_features, self.n_nodes), dtype=np.float32),
+            'adj': np.zeros(shape=(capacity, self.n_nodes, self.n_nodes), dtype=np.float32),
         }
 
         # We use cyclic buffers to store data, and `next_idx` keeps the index of the next empty slot
