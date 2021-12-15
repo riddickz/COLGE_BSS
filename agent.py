@@ -47,7 +47,7 @@ class DQAgent:
         #      self.policy_net = models.GCN_Naive(c_in=8, c_out=1, c_hidden=8)
         self.policy_net = models.GATv2(
             in_features=self.n_features, 
-            n_hidden=64, 
+            n_hidden=128, 
             n_classes=1, 
             n_nodes=self.n_nodes, 
             n_heads=1, 

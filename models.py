@@ -74,7 +74,8 @@ class GATv2(Module):
 
         # self.layer_norm1_h = nn.LayerNorm(self.n_hidden)
         # self.layer_norm2_h = nn.LayerNorm(self.n_hidden*2)
-        self.batch_norm1_h = nn.BatchNorm1d(self.n_nodes)
+        # self.batch_norm1_h = nn.BatchNorm1d(self.n_node)
+
 
         # self.act_elu = nn.ELU()
         self.act_tahn = nn.Tanh()
@@ -105,14 +106,14 @@ class GATv2(Module):
         out1 = self.gat_layer(h_in, adj_mat)
         out1 = self.act_tahn(out1)
         out1 = torch.cat((out1, h_in), dim=2)
-        out1 = self.batch_norm1_h(out1)
+        # out1 = self.batch_norm1_h(out1)
         out1 = self.linear2(out1)
         out1 = self.act_tahn(out1)
 
         out2 = self.gat_layer2(out1, adj_mat)
         out2 = self.act_tahn(out2)
         out2 = torch.cat((out2, out1), dim=2)
-        out2 = self.batch_norm1_h(out2)
+        # out2 = self.batch_norm1_h(out2)
 
         # 1.[END] GAT -----------------------------------------------------------------
 

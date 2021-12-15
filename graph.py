@@ -118,7 +118,7 @@ class Graph:
 
     def node_emb(self,adj):
         pmi_inf = compute_pmi_inf(adj)
-        pmi_inf_trans = compute_log_ramp(pmi_inf, T = 5) # T=3
+        pmi_inf_trans = compute_log_ramp(pmi_inf, T = 3)
         adj = compute_mat_embed(pmi_inf_trans, dims = 4)
         return adj
 
