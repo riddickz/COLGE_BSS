@@ -27,7 +27,7 @@ device = torch.device("cpu")
 
 class DQAgent:
 
-    def __init__(self, model, lr,bs, replace_freq, num_node = 20):
+    def __init__(self, model, lr,bs, replace_freq, num_node = 10):
         self.model_name = model
         self.gamma = .99  # 0.99
         self.epsilon_ = 0.95 #eps
@@ -57,7 +57,7 @@ class DQAgent:
         self.prioritized_replay_beta = Piecewise(
             [
                 (0, 0.),
-                (5*4000, 1)
+                (5*3000, 1)
             ], outside_value=1)
         self.prioritized_replay_alpha = 0.5
         # Replay buffer with α=0.6. Capacity of the replay buffer must be a power of 2.
@@ -70,7 +70,7 @@ class DQAgent:
         self.scheduler = lr_scheduler.ExponentialLR(self.optimizer, gamma=0.999)
 
         # ------Define the loss function-----#
-        self.criterion = torch.nn.SmoothL1Loss()
+        self.criterion = torch.nn.SmoothL1Loss(reduction='none')
 
     def choose_action(self, state, adj, mask):
         pr = torch.rand(1)
@@ -105,6 +105,7 @@ class DQAgent:
         b_r = torch.tensor(transitions['reward']).reshape(self.batch_size,1)
         b_s_ = torch.tensor(transitions['next_obs']).permute(0,2,1).float().to(device)
         b_adj = torch.tensor(transitions['adj']).float().to(device)
+        b_weight = torch.tensor(transitions['weights']).reshape(self.batch_size,1,1).float().to(device)
 
         # calculate the Q value of state-action pair
         a_idx = b_a.unsqueeze(-1)
@@ -121,7 +122,8 @@ class DQAgent:
             td_errors = q_eval - q_target
 
 
-        loss = self.criterion(q_eval, q_target)
+        losses = self.criterion(q_eval, q_target)
+        loss = torch.mean(b_weight * losses)
 
         if loss.abs() > 0.9:
             print("WARNING: HIGH LOSS" )

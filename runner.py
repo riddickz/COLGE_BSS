@@ -152,7 +152,7 @@ class Runner:
         route = [0]
 
         for i in range(0, max_iter):
-            a = self.agent.choose_action(s, adj_mat, mask)
+            a, q_a = self.agent.choose_action(s, adj_mat, mask)
             route.append(a.item())
             s_, r, done, info = self.env.step(a)
 
