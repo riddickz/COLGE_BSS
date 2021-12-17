@@ -61,9 +61,9 @@ class GATv2(Module):
 
         self.linear = nn.Linear(in_features=self.in_features, out_features= self.n_hidden, bias=True)
 
-        self.gat_layer = GraphAttentionV2Layer(self.n_hidden, self.n_hidden, self.n_heads,
+        self.gat_layer = GraphAttentionV2Layer(self.n_hidden, self.n_hidden, self.n_node, self.n_heads,
                                                 is_concat=False, dropout=dropout, share_weights=self.share_weights)
-        self.gat_layer2 = GraphAttentionV2Layer(2*self.n_hidden, self.n_hidden, self.n_heads,
+        self.gat_layer2 = GraphAttentionV2Layer(2*self.n_hidden, self.n_hidden,self.n_node, self.n_heads,
                                                 is_concat=False, dropout=dropout, share_weights=self.share_weights)
 
         self.linear2 = nn.Linear(in_features=2*self.n_hidden, out_features=2*self.n_hidden, bias=True)
@@ -72,7 +72,7 @@ class GATv2(Module):
 
         # self.layer_norm1_h = nn.LayerNorm(self.n_hidden)
         # self.layer_norm2_h = nn.LayerNorm(self.n_hidden*2)
-        # self.batch_norm1_h = nn.BatchNorm1d(self.n_node)
+        self.batch_norm1_h = nn.BatchNorm1d(self.n_node)
 
         # self.act_elu = nn.ELU()
         self.act_tahn = nn.Tanh()
@@ -124,7 +124,7 @@ class GATv2(Module):
 
 class GraphAttentionV2Layer(Module):
 
-    def __init__(self, in_features: int, out_features: int, n_heads: int,
+    def __init__(self, in_features: int, out_features: int, num_node:int, n_heads: int,
                  is_concat: bool = True,
                  dropout: float = 0.6,
                  leaky_relu_negative_slope: float = 0.2,
@@ -134,11 +134,11 @@ class GraphAttentionV2Layer(Module):
         self.in_features = in_features
         self.out_features = out_features
         self.n_heads = n_heads
-        # self.adaptive_edge_PE = adaptive_edge_PE
         self.is_concat = is_concat
         self.dropout = dropout
         self.leaky_relu_negative_slope = leaky_relu_negative_slope
         self.share_weights = share_weights
+        self.n_node = num_node
 
 
         # Calculate the number of dimensions per head
@@ -161,7 +161,7 @@ class GraphAttentionV2Layer(Module):
 
         # The activation for attention score e_ij
         self.activation = nn.Tanh() #nn.LeakyReLU(negative_slope=self.leaky_relu_negative_slope)
-        self.lin10 = nn.Linear(100, 100, bias=False)
+        self.lin10 = nn.Linear(self.n_node ** 2, self.n_node ** 2, bias=False)
         # Softmax to compute attention alpha_ij
         self.softmax = nn.Softmax(dim=2)
 

@@ -5,7 +5,7 @@ from collections import namedtuple, deque
 Transition = namedtuple('Transition',
                         ('state', 'action', 'reward', 'next_state', 'adj', 'mask'))
 
-
+# replay option 1 without PER
 class ReplayMemory(object):
 
     def __init__(self, capacity):
@@ -27,14 +27,14 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-
+# replay option 2 with PER
 class ReplayBuffer:
-    def __init__(self, capacity, alpha):
+    def __init__(self, capacity, alpha, num_node, num_ft):
         # We use a power of 2 for capacity because it simplifies the code and debugging
         self.capacity = capacity
         self.alpha = alpha
-        self.num_ft = 14
-        self.num_node = 10
+        self.num_node = num_node
+        self.num_ft = num_ft
 
         # Maintain segment binary trees to take sum and find minimum over a range
         self.priority_sum = [0 for _ in range(2 * self.capacity)]

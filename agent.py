@@ -27,13 +27,15 @@ device = torch.device("cpu")
 
 class DQAgent:
 
-    def __init__(self, model, lr,bs, replace_freq):
+    def __init__(self, model, lr,bs, replace_freq, num_node = 20):
         self.model_name = model
         self.gamma = .99  # 0.99
         self.epsilon_ = 0.95 #eps
         self.epsilon_min = 0.01 #0.05
         self.discount_factor = 0.99995
         self.neg_inf = -100000
+        self.num_node = num_node
+        self.num_ft = 14
 
         self.target_net_replace_freq = replace_freq  # How frequently target netowrk updates
         # self.mem_capacity = 30000 # capacity of experience replay buffer ,100000
@@ -42,24 +44,24 @@ class DQAgent:
 
         # elif self.model_name == 'GCN_Naive':
         #      self.policy_net = models.GCN_Naive(c_in=8, c_out=1, c_hidden=8)
-        self.policy_net = models.GATv2(in_features=14, n_hidden=128, n_classes=1, n_node=10 , n_heads=1, dropout=0.0, share_weights=False).to(device)
+        self.policy_net = models.GATv2(in_features=self.num_ft, n_hidden=128, n_classes=1, n_node=self.num_node , n_heads=1, dropout=0.1, share_weights=False).to(device)
         self.target_net = copy.deepcopy(self.policy_net).to(device)
 
         # Define counter, memory size and loss function
         self.learn_step_counter = 0  # count the steps of learning process
         self.memory_counter = 0  # counter used for experience replay buffer
 
-        # # ----Define the memory (or the buffer), allocate some space to it. The number
+        # ------- Define the memory (or the buffer)------#
         # self.memory = ReplayMemory(self.mem_capacity)
-        # β for replay buffer as a function of updates
+        # beta for replay buffer as a function of updates
         self.prioritized_replay_beta = Piecewise(
             [
                 (0, 0.),
                 (5*4000, 1)
             ], outside_value=1)
-        self.prioritized_replay_alpha = 0.6 #0.5
+        self.prioritized_replay_alpha = 0.5
         # Replay buffer with α=0.6. Capacity of the replay buffer must be a power of 2.
-        self.replay_buffer = ReplayBuffer(self.mem_capacity, self.prioritized_replay_alpha)
+        self.replay_buffer = ReplayBuffer(self.mem_capacity, self.prioritized_replay_alpha, self.num_node, self.num_ft )
 
         # ------- Define the optimizer------#
         # self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay= 0.01)
@@ -72,13 +74,16 @@ class DQAgent:
 
     def choose_action(self, state, adj, mask):
         pr = torch.rand(1)
+
         if self.epsilon_ > pr:
             mask = mask.detach().cpu().numpy()
+            q_a = None
             action = torch.tensor([np.random.choice(np.where(mask[0] == 1)[0])]) # randomly choose any unvisited node + depot
         else:
             q_a = self.policy_net(state.T.unsqueeze(0), adj.unsqueeze(0), mask=None).detach().clone().to(device)
             action = torch.argmax(q_a[0,:,0] + (1 - mask) * self.neg_inf).reshape(1)
-        return action.to(device)
+
+        return action.to(device), q_a
 
     def learn(self,iter_count):
         # sampling batch of experiences, update parameters of target network
@@ -115,7 +120,13 @@ class DQAgent:
             q_target = (b_r.unsqueeze(-1) + self.gamma * best_q_next).float().to(device)  # (batch_size, 1)
             td_errors = q_eval - q_target
 
+
         loss = self.criterion(q_eval, q_target)
+
+        if loss.abs() > 0.9:
+            print("WARNING: HIGH LOSS" )
+            print(loss)
+
         loss = torch.clamp(loss, min=-1, max=1) # TD error clipped within [−1, 1] for stability
 
         # Calculate priorities for replay buffer
@@ -124,9 +135,7 @@ class DQAgent:
         # Update replay buffer priorities
         self.replay_buffer.update_priorities(transitions['indexes'], new_priorities)
 
-        if loss > 0.01:
-            print("WARNING: HIGH LOSS" )
-            print(loss)
+
 
         self.optimizer.zero_grad()  # reset the gradient to zero
 

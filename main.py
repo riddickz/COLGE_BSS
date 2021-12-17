@@ -28,16 +28,16 @@ parser.add_argument('--niter', type=int, metavar='n', default='100', help='max n
 parser.add_argument('--epoch', type=int, metavar='nepoch',default=1, help="number of epochs")
 parser.add_argument('--lr',type=float, default=0.0000625,help="learning rate")
 parser.add_argument('--bs',type=int,default=32,help="minibatch size for training")
-parser.add_argument('--n_node', type=int, metavar='node_numbers',default=10, help="number of node in generated graphs")
-parser.add_argument('--knn', type=int, metavar='k_neighbor_node',default=5, help="number of node's KNN in generated graphs")
-parser.add_argument('--coeff_demand',type=float, default=2.,help="obj coeff, penalty_cost_demand")
+parser.add_argument('--n_node', type=int, metavar='node_numbers',default=20, help="number of node in generated graphs")
+parser.add_argument('--knn', type=int, metavar='k_neighbor_node',default=9, help="number of node's KNN in generated graphs")
+parser.add_argument('--coeff_demand',type=float, default=5.,help="obj coeff, penalty_cost_demand")
 parser.add_argument('--coeff_time',type=float, default=5.,help="obj coeff, penalty_cost_time")
 parser.add_argument('--car_speed',type=float, default=30.)
 parser.add_argument('--time_limit',type=float, default=35.)
 parser.add_argument('--n_car', type=int, metavar='car_nums', default=3, help='number of vehicles used in game')
 parser.add_argument('--verbose', action='store_true', default=True, help='Display cumulative results at each step')
 parser.add_argument('--val', metavar='validation_mode', default=False)
-parser.add_argument('--replace_freq', type=int,default=300, help='How frequently target netowrk updates')
+parser.add_argument('--replace_freq', type=int,default=400, help='How frequently target netowrk updates')
 parser.add_argument('--penalty_unvisited', type=int, default=2, help='obj coeff, penalty_unvisited')
 parser.add_argument('--starting_fraction', type=float, default=0.5, help='starting amount of bikes to load, as a fraction of max_load')
 parser.add_argument('--reward_scale', type=float, default=500, help='scales the reward')
@@ -70,6 +70,8 @@ def main():
 
         logging.info('Loading agent...')
         agent_class = agent.Agent(args.model, args.lr, args.bs, args.replace_freq)
+        # agent_class.load_model("./trained_models/model_2021-12-15_00-27-32.pt") #  load node - 10 pre-training
+        # agent_class.load_model("./trained_models/model_2021-12-15_06-20-37.pt") #  load node - 20 pre-training
 
         logging.info('Loading environment %s' % args.environment_name)
         env_train = environment.Environment(graph_dic_train,args.environment_name, penalty_unvisited=args.penalty_unvisited, reward_scale=args.reward_scale)

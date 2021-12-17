@@ -58,9 +58,9 @@ class Graph:
     def gen_instance(self):  # Generate random instance
         # self.rng.seed(0)
         self.locations = self.rng.rand(self.num_nodes, 2) * self.area  # node num with (dimension) coordinates in [0,1]
-        pca = PCA(n_components=2)  # center & rotate coordinates
         self.locations[0] = [0.5 * self.area , 0.5 * self.area]  # force depot to be at center
-        self.locations = pca.fit_transform(self.locations)
+        # pca = PCA(n_components=2)  # center & rotate coordinates
+        # self.locations = pca.fit_transform(self.locations)
         self.refresh_demand()
 
     def get_norm_demand(self):
