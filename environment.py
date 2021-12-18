@@ -385,6 +385,7 @@ class Environment:
                                                                  self.ep_reward_overage,
                                                                 self.ep_reward_car)
         plt.title(plt_name)
+        # plt.axis('off')
 
         if save_path is None:
            save_path = 'rl_results/render_{}.pdf'.format(timestamp())
