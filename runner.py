@@ -38,8 +38,9 @@ class Runner:
 
             for i in range(0, max_iter):
                 mask = mask.to(device)
-                a, q_a = self.agent.choose_action(s, adj_mat, mask)
-
+                a, _ = self.agent.choose_action(s, adj_mat, mask)
+                #a, q_a = self.agent.choose_action(s, adj_mat, mask)
+				
                 # obtain the reward and next state and some other information
                 s_, r, done, info = self.env.step(a)
                 mask_ = info[3]
@@ -134,7 +135,7 @@ class Runner:
 
         pickle.dump(cumul_reward_list, open('rl_results/reward_{}.pkl'.format(timestamp()), 'wb'))
         pickle.dump(cumul_loss_list, open('rl_results/loss_{}.pkl'.format(timestamp()), 'wb'))
-        pickle.dump(self.q_a, open('rl_results/q_a{}.pkl'.format(timestamp()), 'wb'))
+        #pickle.dump(self.q_a, open('rl_results/q_a{}.pkl'.format(timestamp()), 'wb'))
 
 
         plot_reward(cumul_reward_list)
@@ -152,7 +153,7 @@ class Runner:
         route = [0]
 
         for i in range(0, max_iter):
-            a, q_a = self.agent.choose_action(s, adj_mat, mask)
+            a, _ = self.agent.choose_action(s, adj_mat, mask)
             route.append(a.item())
             s_, r, done, info = self.env.step(a)
 

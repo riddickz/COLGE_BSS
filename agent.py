@@ -27,15 +27,16 @@ device = torch.device("cpu")
 
 class DQAgent:
 
-    def __init__(self, model, lr,bs, replace_freq, num_node = 10):
+    def __init__(self, model, lr,bs, replace_freq, n_nodes, n_features):
         self.model_name = model
         self.gamma = .99  # 0.99
         self.epsilon_ = 0.95 #eps
         self.epsilon_min = 0.01 #0.05
         self.discount_factor = 0.99995
         self.neg_inf = -100000
-        self.num_node = num_node
-        self.num_ft = 14
+
+        self.n_nodes = n_nodes 
+        self.n_features = n_features
 
         self.target_net_replace_freq = replace_freq  # How frequently target netowrk updates
         # self.mem_capacity = 30000 # capacity of experience replay buffer ,100000
@@ -44,7 +45,14 @@ class DQAgent:
 
         # elif self.model_name == 'GCN_Naive':
         #      self.policy_net = models.GCN_Naive(c_in=8, c_out=1, c_hidden=8)
-        self.policy_net = models.GATv2(in_features=self.num_ft, n_hidden=128, n_classes=1, n_node=self.num_node , n_heads=1, dropout=0.1, share_weights=False).to(device)
+        self.policy_net = models.GATv2(
+            in_features=self.n_features, 
+            n_hidden=128, 
+            n_classes=1, 
+            n_nodes=self.n_nodes, 
+            n_heads=1, 
+            dropout=0.0, 
+            share_weights=False).to(device)
         self.target_net = copy.deepcopy(self.policy_net).to(device)
 
         # Define counter, memory size and loss function
@@ -57,11 +65,11 @@ class DQAgent:
         self.prioritized_replay_beta = Piecewise(
             [
                 (0, 0.),
-                (5*3000, 1)
+                (5*4000, 1)
             ], outside_value=1)
         self.prioritized_replay_alpha = 0.5
         # Replay buffer with α=0.6. Capacity of the replay buffer must be a power of 2.
-        self.replay_buffer = ReplayBuffer(self.mem_capacity, self.prioritized_replay_alpha, self.num_node, self.num_ft )
+        self.replay_buffer = ReplayBuffer(self.mem_capacity, self.prioritized_replay_alpha, self.n_nodes, self.n_features)
 
         # ------- Define the optimizer------#
         # self.optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay= 0.01)

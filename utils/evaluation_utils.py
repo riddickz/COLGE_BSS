@@ -28,9 +28,9 @@ def demand_of_routes(routes, demands):
 		print("    Demand:", route_demand_order)
 
 
-def get_unvisited(routes, num_nodes):
+def get_unvisited(routes, n_nodes):
 	""" Gets the set of unvisited nodes, if any. """
-	nodes = list(range(1, num_nodes))
+	nodes = list(range(1, n_nodes))
 	for route in routes:
 		for node in route:
 			if node == 0:
@@ -130,10 +130,10 @@ def eval_nn_in_env(nn, g):
 	return total_reward, env, specific_reward
 
 
-def eval_agent_in_env(rl_agent, g, max_iters = 10000):
+def eval_agent_in_env(rl_agent, g, max_iters = 10000, force_n_vehicles=True):
 	""" Evaluates RL agent in environment. """
 	graph_dict = {0 : g}
-	env = Environment(graph_dict, "test", verbose=False)
+	env = Environment(graph_dict, "test", verbose=False, force_n_vehicles=force_n_vehicles)
 	rl_runner = runner.Runner(env, rl_agent)
 	reward, route = rl_runner.validate(0, max_iters, verbose=False, return_route=True)
 	
@@ -162,7 +162,7 @@ def eval_agent_in_env(rl_agent, g, max_iters = 10000):
 	return reward, routes, env, specific_reward
 
 
-def evaluate(g, n_instances, seed, rl_agent=None, mip_params=None, freq=10):
+def evaluate(g, n_instances, seed, rl_agent=None, mip_params=None, freq=10, force_n_vehicles=True):
 	""" Evaluates n_instances of each algorithms and stores results in dictionary. """
 	g.seed(seed)
 	results = {
@@ -207,7 +207,7 @@ def evaluate(g, n_instances, seed, rl_agent=None, mip_params=None, freq=10):
 		# get RL routes/reward
 		if rl_agent is not None:
 			rl_time = time.time()
-			rl_reward, rl_route, _, rl_specific_reward = eval_agent_in_env(rl_agent, g)
+			rl_reward, rl_route, _, rl_specific_reward = eval_agent_in_env(rl_agent, g, force_n_vehicles=force_n_vehicles)
 			rl_time = time.time() - rl_time            
 			results["rl"]["routes"].append(rl_route)
 			results["rl"]["cost"].append(rl_reward)
@@ -249,7 +249,7 @@ def render_nn(g, seed, mip_params=None, save_path=None):
 	return
 
 
-def render_rl(g, seed, rl_agent, save_path=None):
+def render_rl(g, seed, rl_agent, save_path=None, force_n_vehicles=True):
 	""" Renders a plot for the RL agent. """
 	if rl_agent is None:
 		return
@@ -257,7 +257,7 @@ def render_rl(g, seed, rl_agent, save_path=None):
 	g.seed(seed)
 	g.bss_graph_gen()
 
-	rl_reward, rl_route, rl_env, _ = eval_agent_in_env(rl_agent, g)    
+	rl_reward, rl_route, rl_env, _ = eval_agent_in_env(rl_agent, g, force_n_vehicles=force_n_vehicles)    
 
 	rl_env.render(save_path=save_path)
 

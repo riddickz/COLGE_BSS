@@ -47,7 +47,7 @@ def main():
     use_penalties = True
     no_bikes_leaving = True
 
-    num_nodes = 10
+    n_nodes = 10
     num_vehicles = 3
     time_limit = 35
 
@@ -60,7 +60,7 @@ def main():
     g = Graph(
             num_nodes = num_nodes, 
             k_nn = 9,
-            num_vehicles = num_vehicles,
+            n_nodes = n_nodes,
             penalty_cost_demand = penalty_cost_demand,
             penalty_cost_time = penalty_cost_time, 
             speed = speed,
