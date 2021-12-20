@@ -5,7 +5,7 @@ from collections import namedtuple, deque
 Transition = namedtuple('Transition',
                         ('state', 'action', 'reward', 'next_state', 'adj', 'mask'))
 
-
+# replay option 1 without PER
 class ReplayMemory(object):
 
     def __init__(self, capacity):
@@ -27,7 +27,7 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-
+# replay option 2 with PER
 class ReplayBuffer:
     def __init__(self, capacity, alpha, n_nodes, n_features):
         # We use a power of 2 for capacity because it simplifies the code and debugging

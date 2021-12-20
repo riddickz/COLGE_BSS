@@ -74,7 +74,7 @@ class GATv2(Module):
 
         # self.layer_norm1_h = nn.LayerNorm(self.n_hidden)
         # self.layer_norm2_h = nn.LayerNorm(self.n_hidden*2)
-        # self.batch_norm1_h = nn.BatchNorm1d(self.n_node)
+        self.batch_norm1_h = nn.BatchNorm1d(self.n_node)
 
 
         # self.act_elu = nn.ELU()

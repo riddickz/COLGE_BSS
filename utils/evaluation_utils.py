@@ -372,3 +372,34 @@ def plot_num_routes(results, rl_agent):
 
 	fig.suptitle("Histogram of the number of vehicles")
 	plt.show()
+
+def plot_num_routes_tot(results):
+	""" Plots histogram of the number of vehicles used. """
+	SMALL_SIZE = 8
+	MEDIUM_SIZE = 15
+	BIGGER_SIZE = 20
+
+	plt.rc('font', size=BIGGER_SIZE)  # controls default text sizes
+	plt.rc('axes', titlesize=MEDIUM_SIZE)  # fontsize of the axes title
+	plt.rc('axes', labelsize=MEDIUM_SIZE)  # fontsize of the x and y labels
+	plt.rc('xtick', labelsize=MEDIUM_SIZE)  # fontsize of the tick labels
+	plt.rc('ytick', labelsize=MEDIUM_SIZE)  # fontsize of the tick labels
+	plt.rc('legend', fontsize=MEDIUM_SIZE)  # legend fontsize
+	plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
+	fig, ax = plt.subplots(figsize=(15,15))
+
+	num_routes_mip = list(map(lambda x: len(x), results["mip"]["routes"]))
+	num_routes_nn = list(map(lambda x: len(x), results["nn"]["routes"]))
+	num_routes_rl = list(map(lambda x: len(x), results["rl"]["routes"]))
+
+	x_multi = [num_routes_mip, num_routes_nn, num_routes_rl]
+	ax.hist(x_multi, label =["MIP","NN","RL"])
+
+	plt.xlabel("Total Vehicles")
+	plt.ylabel('Counts')
+	ax.set_title("Histogram of Total Vehicles")
+	ax.legend(loc='upper right', bbox_to_anchor=(1.04, 1),
+			  fancybox=True, shadow=True)
+	plt.grid()
+	plt.show()
