@@ -72,8 +72,6 @@ def main():
 
         logging.info('Loading agent...')
         agent_class = agent.Agent(args.model, args.lr, args.bs, args.replace_freq, args.n_nodes, args.n_features)
-        # agent_class.load_model("./trained_models/model_2021-12-15_00-27-32.pt") #  load node - 10 pre-training
-        # agent_class.load_model("./trained_models/model_2021-12-15_06-20-37.pt") #  load node - 20 pre-training
 
         logging.info('Loading environment %s' % args.environment_name)
         env_train = environment.Environment(graph_dic_train,
