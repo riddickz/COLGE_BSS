@@ -30,3 +30,8 @@ tmp/
 *.pickle
 *.jpg
 runs/
+/trained_models/
+/rl_results/
+/evaluation_results/
+/notebooks/evaluation_10_locations copy.ipynb
+/notebooks/evaluation_20_locations copy.ipynb

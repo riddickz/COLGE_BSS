@@ -1,9 +1,10 @@
 import torch
 import numpy as np
 import gurobipy as gp
+import random
 
 from graph import Graph
-from bssrp_mip import BSSRPMIP
+from baselines import BSSRPMIP
 from environment import Environment
 
 
@@ -40,14 +41,15 @@ def eval_mip_sol_in_env(mip, g):
 def main():
 
     tol = 1e-3
-    seed = 12343
+    seed = random.randint(0, 9999)
+    print("seed = ",seed)
 
     use_penalties = True
     no_bikes_leaving = True
 
-    num_nodes = 10
-    num_vehicles = 5
-    time_limit = 30
+    n_nodes = 10
+    num_vehicles = 3
+    time_limit = 35
 
     penalty_cost_demand = 2
     penalty_cost_time = 5
@@ -57,13 +59,14 @@ def main():
 
     g = Graph(
             num_nodes = num_nodes, 
-            k_nn = 5,
-            num_vehicles = num_vehicles,
+            k_nn = 9,
+            n_nodes = n_nodes,
             penalty_cost_demand = penalty_cost_demand,
             penalty_cost_time = penalty_cost_time, 
             speed = speed,
             bike_load_time=bike_load_time,
-            time_limit = time_limit)
+            time_limit = time_limit,
+            starting_fraction=0.5)
 
     g.seed(seed)
     g.bss_graph_gen()
@@ -71,7 +74,7 @@ def main():
     ### Evaluate
 
     # get MIP routes/reward
-    mip = BSSRPMIP(g, use_penalties=True, no_bikes_leaving=True)
+    mip = BSSRPMIP(g, use_penalties=True, fixed_bikes_leaving=True)
     mip.optimize()
 
     mip_obj = mip.model.objVal

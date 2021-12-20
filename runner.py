@@ -18,8 +18,13 @@ class Runner:
         self.verbose = verbose
         self.render_on = render
         self.plot_on = False
+        self.step_cnt = 0
+        self.q_a = []
 
     def train(self, g, max_episode, max_iter, iter_count, writer):
+        self.agent.policy_net.train() # dropout/BN train mode
+        self.agent.target_net.train() # dropout/BN train mode
+
         reward_list = []
         loss_list = []
         epsilon_list = []
@@ -33,20 +38,28 @@ class Runner:
 
             for i in range(0, max_iter):
                 mask = mask.to(device)
-                a = self.agent.choose_action(s, adj_mat, mask)
-
+                a, _ = self.agent.choose_action(s, adj_mat, mask)
+                #a, q_a = self.agent.choose_action(s, adj_mat, mask)
+				
                 # obtain the reward and next state and some other information
                 s_, r, done, info = self.env.step(a)
+                mask_ = info[3]
+                self.step_cnt +=1
 
-                # Store the transition in memory
-                self.agent.memory.push(s, a, r, s_, adj_mat, mask)
+                if (not q_a is None) and self.step_cnt%100==0: # collecting q value info
+                    self.q_a.append(q_a)
+                    writer.add_histogram("q_a", q_a, self.step_cnt)
+
+                # # Store the transition in memory
+                # self.agent.memory.push(s, a, r, s_, adj_mat, mask)
+                self.agent.replay_buffer.add(s, a, r, s_, adj_mat)
                 self.agent.memory_counter += 1
 
                 ep_r += r.item()
 
                 # if the experience replay buffer is filled, DQN begins to learn or update its parameters
                 if self.agent.memory_counter > self.agent.mem_capacity:
-                    loss, epsilon =self.agent.learn()
+                    loss, epsilon =self.agent.learn(iter_count)
                     ep_loss.append(loss.item())
                     ep_eps.append(epsilon)
 
@@ -58,11 +71,11 @@ class Runner:
                     print(" ->    Terminal event: episodic rewards = {}".format(ep_r))
                     break
 
-                # use next state to update the current state.
+                # use next state/mask to update the current state/mask.
                 s = s_
-                mask = info[3]
+                mask = mask_
 
-            reward_list.append(ep_r)
+            reward_list.append(ep_r*500)
             loss_avg = np.mean(ep_loss)
             eps_avg = np.mean(ep_eps)
             if len(ep_loss) != 0:
@@ -70,7 +83,7 @@ class Runner:
                 epsilon_list.append(eps_avg)
 
             # collect training tracking info
-            writer.add_scalar("ep_r", ep_r, iter_count)
+            writer.add_scalar("ep_r", ep_r*500, iter_count)
             writer.add_scalar('loss_avg', loss_avg, iter_count)
             writer.add_scalar('eps_avg', eps_avg, iter_count)
 
@@ -105,11 +118,11 @@ class Runner:
                 cumul_reward_list.extend(reward_list)
                 cumul_loss_list.extend(loss_list)
                 cumul_epsilon_list.extend(epsilon_list)
+                self.agent.scheduler.step()
 
-                scaled_cumul_reward_list = (np.array(cumul_reward_list) * self.env.reward_scale).tolist()
 
                 if self.plot_on:
-                    plot_reward(scaled_cumul_reward_list)
+                    plot_reward(cumul_reward_list)
                     plot_loss(cumul_loss_list[50:])
                     plot_loss(cumul_loss_list)
 
@@ -122,21 +135,25 @@ class Runner:
 
         pickle.dump(cumul_reward_list, open('rl_results/reward_{}.pkl'.format(timestamp()), 'wb'))
         pickle.dump(cumul_loss_list, open('rl_results/loss_{}.pkl'.format(timestamp()), 'wb'))
+        #pickle.dump(self.q_a, open('rl_results/q_a{}.pkl'.format(timestamp()), 'wb'))
 
-        scaled_cumul_reward_list = (np.array(cumul_reward_list) * self.env.reward_scale).tolist()
-        plot_reward(scaled_cumul_reward_list)
+
+        plot_reward(cumul_reward_list)
         plot_loss(cumul_loss_list)
         self.env.render()
         writer.close()
         return cumul_reward_list, cumul_loss_list, cumul_epsilon_list
 
     def validate(self, g, max_iter, verbose=True, return_route=False):
+        self.agent.policy_net.eval() # dropout/BN eval mode
+        self.agent.target_net.eval() # dropout/BN eval mode
+
         s, adj_mat,mask = self.env.reset(g)
         ep_r = 0
         route = [0]
 
         for i in range(0, max_iter):
-            a = self.agent.choose_action(s, adj_mat, mask)
+            a, _ = self.agent.choose_action(s, adj_mat, mask)
             route.append(a.item())
             s_, r, done, info = self.env.step(a)
 
@@ -144,7 +161,7 @@ class Runner:
 
             if done:
                 if verbose:
-                    print(" ->    Terminal event: episodic rewards = {}".format(ep_r))
+                    print(" ->    Terminal event: episodic rewards = {},tour= {}, dem = {}, overage ={}".format(ep_r,self.env.ep_reward_tour,self.env.ep_reward_demand,self.env.ep_reward_overage))
                 break
 
             s = s_

@@ -28,9 +28,9 @@ def demand_of_routes(routes, demands):
 		print("    Demand:", route_demand_order)
 
 
-def get_unvisited(routes, num_nodes):
+def get_unvisited(routes, n_nodes):
 	""" Gets the set of unvisited nodes, if any. """
-	nodes = list(range(1, num_nodes))
+	nodes = list(range(1, n_nodes))
 	for route in routes:
 		for node in route:
 			if node == 0:
@@ -130,10 +130,10 @@ def eval_nn_in_env(nn, g):
 	return total_reward, env, specific_reward
 
 
-def eval_agent_in_env(rl_agent, g, max_iters = 10000):
+def eval_agent_in_env(rl_agent, g, max_iters = 10000, force_n_vehicles=True):
 	""" Evaluates RL agent in environment. """
 	graph_dict = {0 : g}
-	env = Environment(graph_dict, "test", verbose=False)
+	env = Environment(graph_dict, "test", verbose=False, force_n_vehicles=force_n_vehicles)
 	rl_runner = runner.Runner(env, rl_agent)
 	reward, route = rl_runner.validate(0, max_iters, verbose=False, return_route=True)
 	
@@ -162,7 +162,7 @@ def eval_agent_in_env(rl_agent, g, max_iters = 10000):
 	return reward, routes, env, specific_reward
 
 
-def evaluate(g, n_instances, seed, rl_agent=None, mip_params=None, freq=10):
+def evaluate(g, n_instances, seed, rl_agent=None, mip_params=None, freq=10, force_n_vehicles=True):
 	""" Evaluates n_instances of each algorithms and stores results in dictionary. """
 	g.seed(seed)
 	results = {
@@ -207,7 +207,7 @@ def evaluate(g, n_instances, seed, rl_agent=None, mip_params=None, freq=10):
 		# get RL routes/reward
 		if rl_agent is not None:
 			rl_time = time.time()
-			rl_reward, rl_route, _, rl_specific_reward = eval_agent_in_env(rl_agent, g)
+			rl_reward, rl_route, _, rl_specific_reward = eval_agent_in_env(rl_agent, g, force_n_vehicles=force_n_vehicles)
 			rl_time = time.time() - rl_time            
 			results["rl"]["routes"].append(rl_route)
 			results["rl"]["cost"].append(rl_reward)
@@ -249,7 +249,7 @@ def render_nn(g, seed, mip_params=None, save_path=None):
 	return
 
 
-def render_rl(g, seed, rl_agent, save_path=None):
+def render_rl(g, seed, rl_agent, save_path=None, force_n_vehicles=True):
 	""" Renders a plot for the RL agent. """
 	if rl_agent is None:
 		return
@@ -257,7 +257,7 @@ def render_rl(g, seed, rl_agent, save_path=None):
 	g.seed(seed)
 	g.bss_graph_gen()
 
-	rl_reward, rl_route, rl_env, _ = eval_agent_in_env(rl_agent, g)    
+	rl_reward, rl_route, rl_env, _ = eval_agent_in_env(rl_agent, g, force_n_vehicles=force_n_vehicles)    
 
 	rl_env.render(save_path=save_path)
 
@@ -371,4 +371,35 @@ def plot_num_routes(results, rl_agent):
 		fig.set_figwidth(10)
 
 	fig.suptitle("Histogram of the number of vehicles")
+	plt.show()
+
+def plot_num_routes_tot(results):
+	""" Plots histogram of the number of vehicles used. """
+	SMALL_SIZE = 8
+	MEDIUM_SIZE = 15
+	BIGGER_SIZE = 20
+
+	plt.rc('font', size=BIGGER_SIZE)  # controls default text sizes
+	plt.rc('axes', titlesize=MEDIUM_SIZE)  # fontsize of the axes title
+	plt.rc('axes', labelsize=MEDIUM_SIZE)  # fontsize of the x and y labels
+	plt.rc('xtick', labelsize=MEDIUM_SIZE)  # fontsize of the tick labels
+	plt.rc('ytick', labelsize=MEDIUM_SIZE)  # fontsize of the tick labels
+	plt.rc('legend', fontsize=MEDIUM_SIZE)  # legend fontsize
+	plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
+	fig, ax = plt.subplots(figsize=(15,15))
+
+	num_routes_mip = list(map(lambda x: len(x), results["mip"]["routes"]))
+	num_routes_nn = list(map(lambda x: len(x), results["nn"]["routes"]))
+	num_routes_rl = list(map(lambda x: len(x), results["rl"]["routes"]))
+
+	x_multi = [num_routes_mip, num_routes_nn, num_routes_rl]
+	ax.hist(x_multi, label =["MIP","NN","RL"])
+
+	plt.xlabel("Total Vehicles")
+	plt.ylabel('Counts')
+	ax.set_title("Histogram of Total Vehicles")
+	ax.legend(loc='upper right', bbox_to_anchor=(1.04, 1),
+			  fancybox=True, shadow=True)
+	plt.grid()
 	plt.show()
